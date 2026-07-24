@@ -3933,7 +3933,7 @@ class MusicService :
         
         // Automix: start crossfade earlier (at 80% of song) for DJ-style mixing
         val triggerOffset = if (automixEnabled) {
-            (player.duration * 0.80f).toLong()
+            (player.duration * 0.95f).toLong()
         } else {
             player.duration - crossfadeDuration.toLong()
         }
