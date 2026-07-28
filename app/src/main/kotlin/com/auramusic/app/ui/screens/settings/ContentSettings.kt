@@ -65,6 +65,7 @@ import com.auramusic.app.constants.EnableKugouKey
 import com.auramusic.app.constants.EnableLrcLibKey
 import com.auramusic.app.constants.EnableRushLyricsKey
 import com.auramusic.app.constants.EnablePaxsenixKey
+import com.auramusic.app.constants.EnableMusixmatchKey
 import com.auramusic.app.constants.EnableSimpMusicKey
 import com.auramusic.app.constants.HideExplicitKey
 import com.auramusic.app.constants.LyricsProviderOrderKey
@@ -127,6 +128,7 @@ fun ContentSettings(
     val (enableSimpMusic, onEnableSimpMusicChange) = rememberPreference(key = EnableSimpMusicKey, defaultValue = true)
     val (enableRushLyrics, onEnableRushLyricsChange) = rememberPreference(key = EnableRushLyricsKey, defaultValue = true)
     val (enablePaxsenix, onEnablePaxsenixChange) = rememberPreference(key = EnablePaxsenixKey, defaultValue = true)
+    val (enableMusixmatch, onEnableMusixmatchChange) = rememberPreference(key = EnableMusixmatchKey, defaultValue = true)
     val (lyricsProviderOrder, onLyricsProviderOrderChange) = rememberPreference(
         key = LyricsProviderOrderKey,
         defaultValue = LyricsProviderRegistry.serializeProviderOrder(LyricsProviderRegistry.getDefaultProviderOrder())
@@ -141,7 +143,7 @@ fun ContentSettings(
     val (showWrappedCard, onShowWrappedCardChange) = rememberPreference(key = ShowWrappedCardKey, defaultValue = false)
 
     // Auto-switch preferred provider if current one is disabled
-    LaunchedEffect(enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix, preferredProvider) {
+    LaunchedEffect(enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix, enableMusixmatch, preferredProvider) {
         val isPreferredProviderEnabled = when (preferredProvider) {
             PreferredLyricsProvider.LRCLIB -> enableLrclib
             PreferredLyricsProvider.KUGOU -> enableKugou
@@ -149,6 +151,7 @@ fun ContentSettings(
             PreferredLyricsProvider.SIMPMUSIC -> enableSimpMusic
             PreferredLyricsProvider.RUSH_LYRICS -> enableRushLyrics
             PreferredLyricsProvider.PAXSENIX -> enablePaxsenix
+            PreferredLyricsProvider.MUSIXMATCH -> enableMusixmatch
         }
         
         if (!isPreferredProviderEnabled) {
@@ -160,6 +163,7 @@ fun ContentSettings(
                     PreferredLyricsProvider.SIMPMUSIC -> enableSimpMusic
                     PreferredLyricsProvider.RUSH_LYRICS -> enableRushLyrics
                     PreferredLyricsProvider.PAXSENIX -> enablePaxsenix
+                    PreferredLyricsProvider.MUSIXMATCH -> enableMusixmatch
                 }
             }
             firstEnabledProvider?.let { onPreferredProviderChange(it) }
@@ -167,7 +171,7 @@ fun ContentSettings(
     }
 
     // Calculate enabled providers count for UI logic
-    val enabledProvidersCount = listOf(enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix).count { it }
+    val enabledProvidersCount = listOf(enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix, enableMusixmatch).count { it }
 
     var showProxyConfigurationDialog by rememberSaveable {
         mutableStateOf(false)
@@ -377,6 +381,7 @@ fun ContentSettings(
                     PreferredLyricsProvider.SIMPMUSIC -> enableSimpMusic
                     PreferredLyricsProvider.RUSH_LYRICS -> enableRushLyrics
                     PreferredLyricsProvider.PAXSENIX -> enablePaxsenix
+                    PreferredLyricsProvider.MUSIXMATCH -> enableMusixmatch
                 }
             },
             valueText = {
@@ -387,6 +392,7 @@ fun ContentSettings(
                     PreferredLyricsProvider.SIMPMUSIC -> "SimpMusic"
                     PreferredLyricsProvider.RUSH_LYRICS -> "RushLyrics"
                     PreferredLyricsProvider.PAXSENIX -> "Paxsenix"
+                    PreferredLyricsProvider.MUSIXMATCH -> "Musixmatch"
                 }
             }
         )
@@ -401,11 +407,12 @@ fun ContentSettings(
             "SimpMusic".takeIf { enableSimpMusic },
             "RushLyrics".takeIf { enableRushLyrics },
             "Paxsenix".takeIf { enablePaxsenix },
+            "Musixmatch".takeIf { enableMusixmatch },
         ).filterNotNull().toSet()
         val lyricsIcon = painterResource(R.drawable.lyrics)
         val draggableItems = remember { mutableStateListOf<DraggableLyricsProviderItem>() }
 
-        LaunchedEffect(currentOrder, enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix) {
+        LaunchedEffect(currentOrder, enableLrclib, enableKugou, enableBetterLyrics, enableSimpMusic, enableRushLyrics, enablePaxsenix, enableMusixmatch) {
             val orderedEnabledProviders = currentOrder.filter { it in enabledProviders }
             val orderedDisabledProviders = currentOrder.filter { it !in enabledProviders }
             draggableItems.clear()
@@ -856,6 +863,27 @@ fun ContentSettings(
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
+                    title = { Text("Enable Musixmatch") },
+                    description = { Text("Synced, rich-synced, and plain lyrics from Musixmatch") },
+                    trailingContent = {
+                        Switch(
+                            checked = enableMusixmatch,
+                            onCheckedChange = onEnableMusixmatchChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (enableMusixmatch) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onEnableMusixmatchChange(!enableMusixmatch) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.set_first_lyrics_provider)) },
                     description = {
                         Text(
@@ -866,6 +894,7 @@ fun ContentSettings(
                                 PreferredLyricsProvider.SIMPMUSIC -> "SimpMusic"
                                 PreferredLyricsProvider.RUSH_LYRICS -> "RushLyrics"
                                 PreferredLyricsProvider.PAXSENIX -> "Paxsenix"
+                                PreferredLyricsProvider.MUSIXMATCH -> "Musixmatch"
                             }
                         )
                     },

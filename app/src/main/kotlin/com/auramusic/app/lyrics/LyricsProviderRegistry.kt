@@ -13,6 +13,7 @@ object LyricsProviderRegistry {
         "KuGou" to KuGouLyricsProvider,
         "RushLyrics" to RushLyricsProvider,
         "Paxsenix" to PaxsenixLyricsProvider,
+        "Musixmatch" to MusixmatchLyricsProvider,
     )
 
     val providerNames = providerMap.keys.toList()
@@ -50,6 +51,7 @@ object LyricsProviderRegistry {
         "BetterLyrics",
         "RushLyrics",
         "Paxsenix",
+        "Musixmatch",
         "SimpMusic",
         "LrcLib",
         "KuGou",

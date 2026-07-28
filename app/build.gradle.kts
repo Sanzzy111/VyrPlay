@@ -378,6 +378,7 @@ dependencies {
     implementation(project(":lrclib"))
     implementation(project(":lastfm"))
     implementation(project(":betterlyrics"))
+    implementation(project(":musixmatch"))
     implementation(project(":simpmusic"))
     implementation(project(":shazamkit"))
     implementation(project(":rush"))

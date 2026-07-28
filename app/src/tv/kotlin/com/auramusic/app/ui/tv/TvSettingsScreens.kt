@@ -1476,6 +1476,10 @@ fun TvPlaybackSettingsScreen(
         key = com.auramusic.app.constants.EnableRushLyricsKey,
         defaultValue = true,
     )
+    val (enableMusixmatch, onEnableMusixmatchChange) = rememberPreference(
+        key = com.auramusic.app.constants.EnableMusixmatchKey,
+        defaultValue = true,
+    )
 
     val firstFocus = focusRequester ?: remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
@@ -1629,6 +1633,16 @@ fun TvPlaybackSettingsScreen(
                 icon = Icons.Filled.Lyrics,
             )
         }
+
+        item {
+            TvContentToggleRow(
+                title = "Musixmatch",
+                subtitle = "Allow synced, rich-synced, and plain Musixmatch results",
+                checked = enableMusixmatch,
+                onCheckedChange = onEnableMusixmatchChange,
+                icon = Icons.Filled.Lyrics,
+            )
+        }
     }
 }
 
@@ -1640,6 +1654,7 @@ private val PreferredLyricsProvider.tvLabel: String
         PreferredLyricsProvider.SIMPMUSIC -> "SimpMusic"
         PreferredLyricsProvider.RUSH_LYRICS -> "RushLyrics"
         PreferredLyricsProvider.PAXSENIX -> "Paxsenix"
+        PreferredLyricsProvider.MUSIXMATCH -> "Musixmatch"
     }
 
 /**
