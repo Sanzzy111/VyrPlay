@@ -1595,11 +1595,20 @@ class MusicService :
                     queueTitle = initialStatus.title
                 }
 
-                // Filter radio items to exclude current media item
-                val radioItems = initialStatus.items.filter { item ->
-                    item.mediaId != currentMediaId
-                }
+                // Keep recommendations fresh: YouTube radio can repeat the seed, queue history,
+                // and even duplicate entries within the same response.
+                val existingMediaIds = (0 until player.mediaItemCount)
+                    .map { player.getMediaItemAt(it).mediaId }
+                    .toSet()
+                val radioItems = initialStatus.items
+                    .distinctBy { it.mediaId }
+                    .filterNot { it.mediaId in existingMediaIds }
 
+                // Do not apply an async result after the user has changed songs/queues.
+                if (player.currentMediaItem?.mediaId != currentMediaId) return@launch
+                if (radioItems.isEmpty()) {
+                    throw IllegalStateException("Radio returned no new recommendations")
+                }
                 if (radioItems.isNotEmpty()) {
                     val itemCount = player.mediaItemCount
 
@@ -1626,13 +1635,17 @@ class MusicService :
                             YouTube.related(relatedEndpoint).getOrNull()
                         }
                         relatedPage?.songs?.let { songs ->
+                            val existingMediaIds = (0 until player.mediaItemCount)
+                                .map { player.getMediaItemAt(it).mediaId }
+                                .toSet()
                             val radioItems = songs
-                                .filter { it.id != currentMediaId }
+                                .distinctBy { it.id }
+                                .filterNot { it.id in existingMediaIds }
                                 .map { it.toMediaItem() }
                                 .filterExplicit(dataStore.get(HideExplicitKey, false))
                                 .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
                             
-                            if (radioItems.isNotEmpty()) {
+                            if (radioItems.isNotEmpty() && player.currentMediaItem?.mediaId == currentMediaId) {
                                 val itemCount = player.mediaItemCount
                                 if (itemCount > currentIndex + 1) {
                                     player.removeMediaItems(currentIndex + 1, itemCount)
@@ -1672,16 +1685,24 @@ class MusicService :
                         .onSuccess { firstResult ->
                             YouTube.next(WatchEndpoint(playlistId = firstResult.endpoint.playlistId))
                                 .onSuccess { secondResult ->
-                                    automixItems.value = secondResult.items.map { song ->
-                                        song.toMediaItem()
-                                    }
+                                    val queuedIds = (0 until player.mediaItemCount)
+                                        .map { player.getMediaItemAt(it).mediaId }
+                                        .toSet()
+                                    automixItems.value = secondResult.items
+                                        .distinctBy { it.id }
+                                        .filterNot { it.id in queuedIds }
+                                        .map { it.toMediaItem() }
                                 }
                                 .onFailure {
                                     // Fallback: use first result items
                                     if (firstResult.items.isNotEmpty()) {
-                                        automixItems.value = firstResult.items.map { song ->
-                                            song.toMediaItem()
-                                        }
+                                        val queuedIds = (0 until player.mediaItemCount)
+                                            .map { player.getMediaItemAt(it).mediaId }
+                                            .toSet()
+                                        automixItems.value = firstResult.items
+                                            .distinctBy { it.id }
+                                            .filterNot { it.id in queuedIds }
+                                            .map { it.toMediaItem() }
                                     }
                                 }
                         }
@@ -2131,7 +2152,13 @@ class MusicService :
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
                 }
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
-                    player.addMediaItems(mediaItems)
+                    val queuedIds = (0 until player.mediaItemCount)
+                        .map { player.getMediaItemAt(it).mediaId }
+                        .toSet()
+                    val newMediaItems = mediaItems
+                        .distinctBy { it.mediaId }
+                        .filterNot { it.mediaId in queuedIds }
+                    player.addMediaItems(newMediaItems)
                     if (player.shuffleModeEnabled) {
                         val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                         applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
@@ -3931,14 +3958,14 @@ class MusicService :
         if (crossfadeGapless && isNextItemGapless()) return
         if (!player.hasNextMediaItem()) return
         
-        // Automix: start crossfade earlier (at 80% of song) for DJ-style mixing
+        // Automix starts the blend once 90% of the current song has played.
         val triggerOffset = if (automixEnabled) {
-            (player.duration * 0.95f).toLong()
+            (player.duration * 0.90f).toLong()
         } else {
             player.duration - crossfadeDuration.toLong()
         }
         val triggerTime = if (automixEnabled) {
-            // Use the earlier of 80% or (end - crossfade) so it starts sooner
+            // Leave enough time for the full fade even on short tracks.
             minOf(triggerOffset, player.duration - crossfadeDuration.toLong())
         } else {
             triggerOffset
@@ -4090,7 +4117,11 @@ class MusicService :
             val duration = crossfadeDuration.toLong()
             val steps = 20
             val stepTime = duration / steps
-            val startVolume = try { fadingPlayer?.volume ?: 1f } catch(e:Exception) { 1f }
+            // Use the persisted target volume rather than the outgoing player's temporary
+            // duck/mute/ramp value. The player reference changed above, so the volume flow does
+            // not emit again automatically after the swap.
+            val startVolume = if (isMuted.value) 0f else playerVolume.value
+            player.volume = startVolume * 0.01f
             
             for (i in 0..steps) {
                 if (!isActive) break

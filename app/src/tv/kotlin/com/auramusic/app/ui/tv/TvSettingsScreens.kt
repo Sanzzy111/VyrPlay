@@ -120,6 +120,7 @@ import com.auramusic.innertube.YouTube
 import com.auramusic.innertube.utils.parseCookieString
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 
 /* -------------------------- Login (WebView) -------------------------- */
 
@@ -141,6 +142,35 @@ import kotlinx.coroutines.launch
     var webView: WebView? = null
     val backFocus = focusRequester ?: remember { FocusRequester() }
     var webViewFocused by remember { mutableStateOf(false) }
+    val lastAccountInfoFetchSession = remember { AtomicReference<String?>(null) }
+    val latestCookie = remember { AtomicReference(innerTubeCookie) }
+    val latestVisitorData = remember { AtomicReference(visitorData) }
+    val latestDataSyncId = remember { AtomicReference(dataSyncId) }
+
+    fun refreshAccountInfoIfReady() {
+        val cookie = latestCookie.get().takeIf { "SAPISID" in parseCookieString(it) } ?: return
+        val normalizedDataSyncId = latestDataSyncId.get()
+            .substringBefore("||")
+            .takeIf { it.isNotBlank() && it != "null" }
+        val sessionKey = "$cookie|${normalizedDataSyncId.orEmpty()}"
+        if (lastAccountInfoFetchSession.get() == sessionKey) return
+        lastAccountInfoFetchSession.set(sessionKey)
+
+        YouTube.cookie = cookie
+        YouTube.visitorData = latestVisitorData.get().takeIf { it.isNotBlank() }
+        YouTube.dataSyncId = normalizedDataSyncId
+
+        coroutineScope.launch {
+            YouTube.accountInfo().onSuccess {
+                accountName = it.name
+                accountEmail = it.email.orEmpty()
+                accountChannelHandle = it.channelHandle.orEmpty()
+            }.onFailure {
+                lastAccountInfoFetchSession.set(null)
+                reportException(it)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         runCatching { backFocus.requestFocus() }
@@ -253,19 +283,10 @@ import kotlinx.coroutines.launch
                                 if (url?.startsWith("https://music.youtube.com") == true) {
                                     CookieManager.getInstance().flush()
                                     val cookie = CookieManager.getInstance().getCookie(url).orEmpty()
+                                    latestCookie.set(cookie)
                                     innerTubeCookie = cookie
                                     YouTube.cookie = cookie
-                                    YouTube.visitorData = visitorData.takeIf { it.isNotBlank() && it != "null" }
-                                    YouTube.dataSyncId = dataSyncId.substringBefore("||").takeIf { it.isNotBlank() && it != "null" }
-                                    coroutineScope.launch {
-                                        YouTube.accountInfo().onSuccess {
-                                            accountName = it.name
-                                            accountEmail = it.email.orEmpty()
-                                            accountChannelHandle = it.channelHandle.orEmpty()
-                                        }.onFailure {
-                                            reportException(it)
-                                        }
-                                    }
+                                    refreshAccountInfoIfReady()
                                 }
                             }
                         }
@@ -284,8 +305,10 @@ import kotlinx.coroutines.launch
                             @JavascriptInterface
                             fun onRetrieveVisitorData(newVisitorData: String?) {
                                 if (!newVisitorData.isNullOrBlank() && newVisitorData != "null") {
+                                    latestVisitorData.set(newVisitorData)
                                     visitorData = newVisitorData
                                     YouTube.visitorData = newVisitorData
+                                    refreshAccountInfoIfReady()
                                 }
                             }
 
@@ -295,8 +318,10 @@ import kotlinx.coroutines.launch
                                     ?.substringBefore("||")
                                     ?.takeIf { it.isNotBlank() && it != "null" }
                                 if (normalizedDataSyncId != null) {
+                                    latestDataSyncId.set(normalizedDataSyncId)
                                     dataSyncId = normalizedDataSyncId
                                     YouTube.dataSyncId = normalizedDataSyncId
+                                    refreshAccountInfoIfReady()
                                 }
                             }
                         }, "Android")

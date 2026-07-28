@@ -165,7 +165,7 @@ class TvRecommendationService : android.app.Service() {
             null
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
-                return cursor.getLong(0)
+                return cursor.getLong(0).also { requestChannelVisibility(ctx, it) }
             }
         }
 
@@ -180,7 +180,18 @@ class TvRecommendationService : android.app.Service() {
             channel.toContentValues()
         )
 
-        return channelUri?.lastPathSegment?.toLongOrNull() ?: 0L
+        return channelUri?.lastPathSegment?.toLongOrNull()?.also {
+            requestChannelVisibility(ctx, it)
+        } ?: 0L
+    }
+
+    private fun requestChannelVisibility(ctx: Context, channelId: Long) {
+        if (channelId <= 0L) return
+        try {
+            TvContractCompat.requestChannelBrowsable(ctx, channelId)
+        } catch (e: Exception) {
+            Timber.w(e, "TV launcher rejected recommendation channel visibility request")
+        }
     }
 
     private fun readPersistQueue(context: Context): PersistQueue? {

@@ -691,6 +691,10 @@ fun TvTopBar(
     onSectionSelect: ((TvSection) -> Unit)? = null,
     topBarFocusRequester: FocusRequester? = null,
 ) {
+    val screenWidthDp = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.width / density
+    }
+    val compactTopBar = screenWidthDp < 1100f
     val focusRequesters = remember {
         if (TvSection.entries.size > 1) {
             List(TvSection.entries.size - 1) { FocusRequester() }
@@ -789,18 +793,20 @@ fun TvTopBar(
                  )
              }
 
-              Text(
-                  text = "AuraMusic Tv",
-                  style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.onSurface,
-                  modifier = Modifier.padding(start = 8.dp)
-              )
+             if (!compactTopBar) {
+                 Text(
+                     text = "AuraMusic Tv",
+                     style = MaterialTheme.typography.titleMedium,
+                     fontWeight = FontWeight.Bold,
+                     color = MaterialTheme.colorScheme.onSurface,
+                     modifier = Modifier.padding(start = 8.dp)
+                 )
+             }
 
              Spacer(modifier = Modifier.weight(1f))
 
                 // Mini player (compact to fit alongside nav buttons)
-                if (showMiniPlayer && (currentSong != null || currentMediaMetadata != null)) {
+                if (!compactTopBar && showMiniPlayer && (currentSong != null || currentMediaMetadata != null)) {
                     val miniTitle = currentSong?.title ?: currentMediaMetadata?.title.orEmpty()
                     val miniArtists = currentSong?.artists?.joinToString(", ") { it.name }
                         ?: currentMediaMetadata?.artists?.joinToString(", ") { it.name }.orEmpty()
@@ -2353,12 +2359,18 @@ fun TvSearchScreen(
 @Composable
 fun TvRecentSearchItem(query: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val isFocusedState = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Surface(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocusedState.value = it.isFocused }
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged {
+                isFocusedState.value = it.isFocused
+                if (it.isFocused) scope.launch { bringIntoViewRequester.bringIntoView() }
+            }
             .border(
                 width = if (isFocusedState.value) 2.dp else 0.dp,
                 color = if (isFocusedState.value) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -2394,12 +2406,18 @@ fun TvRecentSearchItem(query: String, onClick: () -> Unit, modifier: Modifier = 
 fun TvSearchResultItem(item: LocalItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val isFocusedState = remember { mutableStateOf(false) }
     val isArtist = item is Artist
+    val scope = rememberCoroutineScope()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .onFocusChanged { isFocusedState.value = it.isFocused }
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged {
+                isFocusedState.value = it.isFocused
+                if (it.isFocused) scope.launch { bringIntoViewRequester.bringIntoView() }
+            }
             .border(
                 width = if (isFocusedState.value) 3.dp else 0.dp,
                 color = if (isFocusedState.value) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -2473,12 +2491,18 @@ fun TvSearchResultItem(item: LocalItem, onClick: () -> Unit, modifier: Modifier 
 fun TvYTSearchResultItem(item: YTItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val isFocusedState = remember { mutableStateOf(false) }
     val isArtist = item is com.auramusic.innertube.models.ArtistItem
+    val scope = rememberCoroutineScope()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Surface(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocusedState.value = it.isFocused }
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged {
+                isFocusedState.value = it.isFocused
+                if (it.isFocused) scope.launch { bringIntoViewRequester.bringIntoView() }
+            }
             .border(
                 width = if (isFocusedState.value) 2.dp else 0.dp,
                 color = if (isFocusedState.value) MaterialTheme.colorScheme.primary else Color.Transparent,

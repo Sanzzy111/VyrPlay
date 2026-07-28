@@ -26,6 +26,7 @@ import com.auramusic.innertube.utils.parseCookieString
 import com.auramusic.app.constants.HideExplicitKey
 import com.auramusic.app.constants.HideVideoSongsKey
 import com.auramusic.app.constants.InnerTubeCookieKey
+import com.auramusic.app.constants.AccountNameKey
 import com.auramusic.app.constants.AudiobookIdsKey
 import com.auramusic.app.constants.AudiobookPositionsKey
 import com.auramusic.app.constants.QuickPicks
@@ -672,6 +673,13 @@ fun markWrappedAsSeen() {
                         return@collectLatest
                     }
 
+                    // Show the last verified identity immediately while refreshing it. Without
+                    // this hydration every ViewModel recreation incorrectly displayed "Guest".
+                    accountName.value = context.dataStore.get(AccountNameKey, "")
+                        .takeIf { it.isNotBlank() }
+                        ?: accountName.value.takeUnless { it == "Guest" }
+                        ?: "Signed in"
+
                     YouTube.cookie = cookie
                     YouTube.visitorData = visitorData?.takeIf { it.isNotBlank() }
                     YouTube.dataSyncId = dataSyncId
@@ -679,6 +687,9 @@ fun markWrappedAsSeen() {
                     YouTube.accountInfo().onSuccess { info ->
                         accountName.value = info.name
                         accountImageUrl.value = info.thumbnailUrl
+                        context.dataStore.edit { prefs ->
+                            prefs[AccountNameKey] = info.name
+                        }
                     }.onFailure {
                         reportException(it)
                     }
