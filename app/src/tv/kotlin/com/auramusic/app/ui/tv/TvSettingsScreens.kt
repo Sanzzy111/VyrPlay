@@ -1055,15 +1055,14 @@ fun TvLastFMSettingsScreen(
         contentPadding = PaddingValues(start = 64.dp, top = 95.dp, end = 64.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        // Back button
         item {
-            IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp).onFocusChanged { backButtonFocused = it.isFocused }.border(width = if (backButtonFocused) 3.dp else 0.dp, color = if (backButtonFocused) MaterialTheme.colorScheme.primary else Color.Transparent, shape = CircleShape)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(32.dp))
-            }
+            TvSettingsHeader(
+                title = "Last.fm Integration",
+                onBackClick = onBackClick,
+                focusRequester = firstFocus,
+                onFocusChange = { backButtonFocused = it },
+            )
         }
-
-        // Title
-        item { Text("Last.fm Integration", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
 
         // Account
         item {

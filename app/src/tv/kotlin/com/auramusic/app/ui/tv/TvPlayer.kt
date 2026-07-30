@@ -333,6 +333,10 @@ fun TvPlayerScreen(
     // has player artwork, lyrics and video state.
     val mediaMetadata = currentSong?.toMediaMetadata() ?: currentMediaMetadata
 
+    LaunchedEffect(showLyrics) {
+        if (!showLyrics) lyricsExpanded = false
+    }
+
     LaunchedEffect(mediaMetadata?.id, mediaMetadata?.isVideoSong, videoModeToggleEnabled) {
         val videoId = mediaMetadata?.id ?: return@LaunchedEffect
         val playerConnection = pc ?: return@LaunchedEffect
@@ -829,6 +833,7 @@ fun TvPlayerScreen(
                                     lyricsExpanded = !lyricsExpanded
                                 } else {
                                     onShowLyricsChange(true)
+                                    lyricsExpanded = true
                                 }
                             },
                             icon = Icons.Filled.Lyrics,
