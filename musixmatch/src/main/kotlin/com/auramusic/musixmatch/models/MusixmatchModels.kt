@@ -3,14 +3,21 @@ package com.auramusic.musixmatch.models
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class ApiResponse(val message: Message) {
     @Serializable
-    data class Message(val header: Header, val body: JsonElement)
+    data class Message(
+        val header: Header,
+        val body: JsonElement = JsonObject(emptyMap()),
+    )
 
     @Serializable
-    data class Header(@SerialName("status_code") val statusCode: Int = 0)
+    data class Header(
+        @SerialName("status_code") val statusCode: Int = 0,
+        val hint: String? = null,
+    )
 }
 
 @Serializable

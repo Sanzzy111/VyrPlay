@@ -105,13 +105,22 @@ object Musixmatch {
 
     private suspend fun token(): String = tokenLock.withLock {
         userToken?.let { return@withLock it }
-        val value = signedGet("token.get", emptyMap()).decode<TokenBody>().userToken
+        val response = signedGet("token.get", emptyMap())
+        val status = response.message.header.statusCode
+        check(status == 200) {
+            "Musixmatch token request failed with status $status" +
+                response.message.header.hint?.let { " ($it)" }.orEmpty()
+        }
+        val value = response.decode<TokenBody>().userToken
         require(value.isNotBlank() && !value.startsWith("UpgradeOnly")) { "Musixmatch token unavailable" }
         value.also { userToken = it }
     }
 
     private suspend fun signedGet(method: String, values: Map<String, String>): ApiResponse {
-        val params = linkedMapOf("app_id" to APP_ID).apply { putAll(values) }
+        val params = linkedMapOf(
+            "app_id" to APP_ID,
+            "format" to "json",
+        ).apply { putAll(values) }
         val query = params.entries.joinToString("&") { (k, v) ->
             "${k.encodeURLParameter()}=${v.encodeURLParameter(spaceToPlus = false)}"
         }
@@ -133,6 +142,7 @@ object Musixmatch {
             header("User-Agent", USER_AGENT)
             header("Accept", "application/json, text/plain, */*")
             header("Accept-Language", "en-US,en;q=0.9")
+            header("Cookie", "mxm_bab=AB")
         }
         if (response.status.value == 401 || response.status.value == 402) {
             return ApiResponse(ApiResponse.Message(ApiResponse.Header(response.status.value), json.parseToJsonElement("{}")))
