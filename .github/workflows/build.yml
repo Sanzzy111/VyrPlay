@@ -15,17 +15,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { variant: foss, ui: Mobile, arch: universal, task: FossMobileUniversal, output: fossMobileUniversal }
-          - { variant: foss, ui: Mobile, arch: arm64, task: FossMobileArm64, output: fossMobileArm64 }
-          - { variant: foss, ui: Mobile, arch: armeabi, task: FossMobileArmeabi, output: fossMobileArmeabi }
-          - { variant: foss, ui: Mobile, arch: x86, task: FossMobileX86, output: fossMobileX86 }
-          - { variant: foss, ui: Mobile, arch: x86_64, task: FossMobileX86_64, output: fossMobileX86_64 }
-          - { variant: gms, ui: Mobile, arch: universal, task: GmsMobileUniversal, output: gmsMobileUniversal }
-          - { variant: gms, ui: Mobile, arch: arm64, task: GmsMobileArm64, output: gmsMobileArm64 }
-          - { variant: gms, ui: Mobile, arch: armeabi, task: GmsMobileArmeabi, output: gmsMobileArmeabi }
-          - { variant: gms, ui: Mobile, arch: x86, task: GmsMobileX86, output: gmsMobileX86 }
-          - { variant: gms, ui: Mobile, arch: x86_64, task: GmsMobileX86_64, output: gmsMobileX86_64 }
-          - { variant: foss, ui: Tv, arch: universal, task: FossTvUniversal, output: fossTvUniversal }
+          - { variant: foss, ui: Mobile, arch: universal, task: FossMobileUniversal, output: fossMobileUniversal, asset: AuraMusic.apk }
+          - { variant: standalone, ui: Mobile, arch: arm64, task: StandaloneMobileArm64, output: standaloneMobileArm64, asset: AuraMusic-arm64.apk }
+          - { variant: standalone, ui: Mobile, arch: armeabi, task: StandaloneMobileArmeabi, output: standaloneMobileArmeabi, asset: AuraMusic-armeabi.apk }
+          - { variant: standalone, ui: Mobile, arch: x86, task: StandaloneMobileX86, output: standaloneMobileX86, asset: AuraMusic-x86.apk }
+          - { variant: standalone, ui: Mobile, arch: x86_64, task: StandaloneMobileX86_64, output: standaloneMobileX86_64, asset: AuraMusic-x86_64.apk }
+          - { variant: gms, ui: Mobile, arch: universal, task: GmsMobileUniversal, output: gmsMobileUniversal, asset: AuraMusic-with-Google-Cast.apk }
+          - { variant: foss, ui: Tv, arch: universal, task: FossTvUniversal, output: fossTvUniversal, asset: AuraMusic-Tv.apk }
     permissions:
       contents: read
       id-token: write
@@ -85,9 +81,16 @@ jobs:
           sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
           ./gradlew assemble${{ matrix.task }}Release --no-daemon --no-configuration-cache
 
+      - name: Name APK for release
+        run: |
+          mkdir -p release-artifact
+          apk="$(find app/build/outputs/apk/${{ matrix.output }}/release -maxdepth 1 -name '*.apk' -type f | head -n1)"
+          test -n "$apk"
+          cp "$apk" "release-artifact/${{ matrix.asset }}"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.ui }}-${{ matrix.variant }}-${{ matrix.arch }}-release
-          path: app/build/outputs/apk/${{ matrix.output }}/release/*.apk
+          path: release-artifact/${{ matrix.asset }}
           if-no-files-found: error

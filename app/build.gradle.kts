@@ -72,6 +72,13 @@ android {
             dimension = "variant"
             buildConfigField("Boolean", "CAST_AVAILABLE", "true")
         }
+
+        // Architecture-specific release APKs. These intentionally use neither the FOSS nor
+        // GMS flavor name; they share the non-Cast implementation without branding as FOSS.
+        create("standalone") {
+            dimension = "variant"
+            buildConfigField("Boolean", "CAST_AVAILABLE", "false")
+        }
         
         create("universal") {
             dimension = "abi"
@@ -120,6 +127,10 @@ android {
         }
         getByName("gms") {
             kotlin.srcDirs("src/gms/kotlin")
+        }
+        getByName("standalone") {
+            kotlin.srcDirs("src/foss/kotlin")
+            manifest.srcFile("src/foss/AndroidManifest.xml")
         }
         getByName("tv") {
             kotlin.srcDirs("src/tv/kotlin")

@@ -315,7 +315,7 @@ enum class TvSection(val label: String) {
       }
 
      // Keep screen on when music is playing
-     val (keepScreenOnPref, _) = rememberPreference(com.auramusic.app.constants.KeepScreenOn, true)
+     val (keepScreenOnPref, _) = rememberPreference(com.auramusic.app.constants.KeepScreenOn, false)
      DisposableEffect(isPlayingState.value, keepScreenOnPref) {
          val activity = view.context as? android.app.Activity
          val window = activity?.window

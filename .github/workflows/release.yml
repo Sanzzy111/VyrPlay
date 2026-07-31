@@ -338,13 +338,15 @@ jobs:
           set -euo pipefail
           sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
 
-          tasks=()
-          for variant in Foss Gms; do
-            for arch in Universal Arm64 Armeabi X86 X86_64; do
-              tasks+=("assemble${variant}Mobile${arch}Release")
-            done
-          done
-          tasks+=(assembleFossTvUniversalRelease)
+          tasks=(
+            assembleFossMobileUniversalRelease
+            assembleGmsMobileUniversalRelease
+            assembleStandaloneMobileArm64Release
+            assembleStandaloneMobileArmeabiRelease
+            assembleStandaloneMobileX86Release
+            assembleStandaloneMobileX86_64Release
+            assembleFossTvUniversalRelease
+          )
           ./gradlew "${tasks[@]}" --no-daemon --no-configuration-cache
 
       - name: Collect and rename APK assets
@@ -355,17 +357,24 @@ jobs:
           set -euo pipefail
           mkdir -p release-artifacts
 
-          for variant in foss gms; do
-            for arch in universal arm64 armeabi x86 x86_64; do
-              flavor_dir="${variant}Mobile${arch^}"
-              apk="$(find "app/build/outputs/apk/${flavor_dir}/release" -maxdepth 1 -name '*.apk' -type f | head -n1)"
-              test -n "$apk"
-              cp "$apk" "release-artifacts/AuraMusic-${variant}-${arch}.apk"
-            done
-          done
+          copy_apk() {
+            local source_dir="$1"
+            local output_name="$2"
+            local apk
+            apk="$(find "$source_dir" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+            test -n "$apk"
+            cp "$apk" "release-artifacts/$output_name"
+          }
+
+          copy_apk app/build/outputs/apk/fossMobileUniversal/release AuraMusic.apk
+          copy_apk app/build/outputs/apk/gmsMobileUniversal/release AuraMusic-with-Google-Cast.apk
+          copy_apk app/build/outputs/apk/standaloneMobileArm64/release AuraMusic-arm64.apk
+          copy_apk app/build/outputs/apk/standaloneMobileArmeabi/release AuraMusic-armeabi.apk
+          copy_apk app/build/outputs/apk/standaloneMobileX86/release AuraMusic-x86.apk
+          copy_apk app/build/outputs/apk/standaloneMobileX86_64/release AuraMusic-x86_64.apk
           tv_apk="$(find app/build/outputs/apk/fossTvUniversal/release -maxdepth 1 -name '*.apk' -type f | head -n1)"
           test -n "$tv_apk"
-          cp "$tv_apk" release-artifacts/AuraMusic-tv-universal.apk
+          cp "$tv_apk" release-artifacts/AuraMusic-Tv.apk
 
           ls -la release-artifacts
 

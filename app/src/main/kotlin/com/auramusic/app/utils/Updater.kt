@@ -28,7 +28,7 @@ data class ReleaseAsset(
     val downloadUrl: String,
     val size: Long,
     val architecture: String,
-    val variant: String // "foss" or "gms"
+    val variant: String // "foss", "gms", "standalone", or "tv"
 )
 
 object Updater {
@@ -93,7 +93,11 @@ object Updater {
      */
     private fun getCurrentAppVariant(): Pair<String, String> {
         val architecture = BuildConfig.ARCHITECTURE
-        val variant = if (BuildConfig.CAST_AVAILABLE) "gms" else "foss"
+        val variant = when {
+            BuildConfig.CAST_AVAILABLE -> "gms"
+            architecture != "universal" -> "standalone"
+            else -> "foss"
+        }
         return architecture to variant
     }
 
@@ -113,13 +117,15 @@ object Updater {
             val downloadUrl = asset.getString("browser_download_url")
             val size = asset.getLong("size")
             
-            // Canonical names deliberately accept only the published contract values.
+            // Universal builds identify FOSS/GMS. ABI-specific builds are standalone assets.
             val (arch, variant) = when {
-                name.matches(Regex("AuraMusic-(foss|gms)-(universal|arm64|armeabi|x86|x86_64)\\.apk")) -> {
-                    val parts = name.removePrefix("AuraMusic-").removeSuffix(".apk").split("-")
-                    parts[1] to parts[0]
-                }
-                name == "AuraMusic-tv-universal.apk" -> "universal" to "tv"
+                name == "AuraMusic-foss-universal.apk" -> "universal" to "foss"
+                name == "AuraMusic-gms-universal.apk" -> "universal" to "gms"
+                name == "AuraMusic-arm64.apk" -> "arm64" to "standalone"
+                name == "AuraMusic-armeabi.apk" -> "armeabi" to "standalone"
+                name == "AuraMusic-x86.apk" -> "x86" to "standalone"
+                name == "AuraMusic-x86_64.apk" -> "x86_64" to "standalone"
+                name == "AuraMusic-tv-foss-universal.apk" || name == "AuraMusic-tv-universal.apk" -> "universal" to "tv"
                 // Legacy universal release names retained for existing releases.
                 name == "Auramusic.apk" || name == "AuraMusic.apk" -> "universal" to "foss"
                 name == "Auramusic-with-Google-Cast.apk" || name == "AuraMusic-with-Google-Cast.apk" -> "universal" to "gms"
@@ -280,13 +286,19 @@ object Updater {
             ?.takeUnless { it == "automatic" }
             ?: currentArch
 
-        // First try to find exact match
+        // GMS only ships as universal. FOSS can use a smaller standalone ABI asset.
         val exactMatch = releaseInfo.assets
             .find { it.architecture == architecture && it.variant == variant }
             ?.downloadUrl
         
         if (exactMatch != null) return exactMatch
         
+        if (variant == "foss" && architecture != "universal") {
+            releaseInfo.assets.find {
+                it.architecture == architecture && it.variant == "standalone"
+            }?.downloadUrl?.let { return it }
+        }
+
         // The only safe fallback is the universal APK of the selected flavor.
         val fallbackMatch = releaseInfo.assets
             .find { it.architecture == "universal" && it.variant == variant }

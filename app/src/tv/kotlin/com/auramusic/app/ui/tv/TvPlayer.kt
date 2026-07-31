@@ -295,6 +295,8 @@ fun TvPlayerScreen(
 
     // Local alias for concise usage throughout the composable
     val pc = effectivePlayerConnection
+    val activePlayer by (pc?.service?.playerFlow?.collectAsState(initial = pc.player)
+        ?: remember { mutableStateOf(null) })
 
     // Focus requesters for TV navigation
     val playButtonFocus = remember { FocusRequester() }
@@ -319,8 +321,8 @@ fun TvPlayerScreen(
         }
     }
 
-    LaunchedEffect(pc?.player) {
-        val player = pc?.player ?: return@LaunchedEffect
+    LaunchedEffect(activePlayer) {
+        val player = activePlayer ?: return@LaunchedEffect
         while (true) {
             delay(250)
             duration = player.duration.takeIf { it != C.TIME_UNSET } ?: 0L
@@ -515,23 +517,26 @@ fun TvPlayerScreen(
                             AndroidView(
                                 factory = { ctx ->
                                     PlayerView(ctx).apply {
-                                        player = pc?.player
+                                        player = activePlayer
                                         useController = false
                                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                                         setBackgroundColor(android.graphics.Color.BLACK)
                                         setShutterBackgroundColor(android.graphics.Color.BLACK)
-                                        keepScreenOn = true
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize(),
                                 update = { playerView ->
                                     // Always sync player reference and resume surface
-                                    if (playerView.player !== pc?.player) {
-                                        playerView.player = pc?.player
+                                    if (playerView.player !== activePlayer) {
+                                        playerView.player = activePlayer
                                     }
                                     playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                                     playerView.onResume()
                                     playerView.requestLayout()
+                                },
+                                onRelease = { playerView ->
+                                    playerView.player = null
+                                    playerView.onPause()
                                 },
                             )
 
@@ -830,14 +835,15 @@ fun TvPlayerScreen(
                         TvPlayerControlButton(
                             onClick = {
                                 if (showLyrics) {
-                                    lyricsExpanded = !lyricsExpanded
+                                    onShowLyricsChange(false)
+                                    lyricsExpanded = false
                                 } else {
                                     onShowLyricsChange(true)
                                     lyricsExpanded = true
                                 }
                             },
                             icon = Icons.Filled.Lyrics,
-                            contentDescription = if (lyricsExpanded) "Collapse lyrics" else if (showLyrics) "Expand lyrics" else "Show lyrics",
+                            contentDescription = if (showLyrics) "Show album artwork" else "Show expanded lyrics",
                             tint = if (showLyrics) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
                             size = sideControlSize,
                         )

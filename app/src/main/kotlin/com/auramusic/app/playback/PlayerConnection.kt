@@ -28,6 +28,7 @@ import com.auramusic.app.playback.queues.Queue
 import com.auramusic.app.utils.reportException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -76,6 +77,9 @@ import timber.log.Timber
 
     /** Tracks whether player initialization completed successfully */
     private val isPlayerInitialized = MutableStateFlow(service.isPlayerReady.value)
+    private var readinessJob: Job? = null
+    private var playerFlowJob: Job? = null
+    private var disposed = false
 
     val playbackState: MutableStateFlow<Int>
     private val playWhenReady: MutableStateFlow<Boolean>
@@ -105,8 +109,9 @@ import timber.log.Timber
         )
         
         // Track service readiness changes in background.
-        scope.launch {
+        readinessJob = scope.launch {
             playerReadinessFlow.collect { ready ->
+                if (disposed) return@collect
                 isPlayerInitialized.value = ready
                 if (ready) {
                     Timber.tag(TAG).d("Service player initialization detected by PlayerConnection")
@@ -228,9 +233,9 @@ import timber.log.Timber
     init {
         try {
             // Observe player changes (e.g. crossfade swap)
-            scope.launch {
+            playerFlowJob = scope.launch {
                 service.playerFlow.collect { newPlayer ->
-                    if (newPlayer != null && newPlayer != attachedPlayer) {
+                    if (!disposed && newPlayer != null && newPlayer != attachedPlayer) {
                         updateAttachedPlayer(newPlayer)
                     }
                 }
@@ -250,6 +255,7 @@ import timber.log.Timber
     }
 
     private fun updateAttachedPlayer(newPlayer: Player) {
+        if (disposed) return
         attachedPlayer?.removeListener(this)
         attachedPlayer = newPlayer
         newPlayer.addListener(this)
@@ -560,6 +566,11 @@ import timber.log.Timber
 
     fun dispose() {
         try {
+            disposed = true
+            readinessJob?.cancel()
+            playerFlowJob?.cancel()
+            readinessJob = null
+            playerFlowJob = null
             attachedPlayer?.removeListener(this)
             attachedPlayer = null
             Timber.tag(TAG).d("PlayerConnection disposed successfully")

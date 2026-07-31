@@ -74,6 +74,7 @@ class TvMainActivity : ComponentActivity() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as? MusicBinder ?: return
             try {
+                disposePlayerConnection()
                 val connection = PlayerConnection(
                     this@TvMainActivity,
                     binder,
@@ -89,13 +90,8 @@ class TvMainActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            // Only dispose if we're actually being destroyed, not just rebinding
-            if (isFinishing || isDestroyed) {
-                disposePlayerConnection()
-            } else {
-                Timber.tag("TvMainActivity").w("Service disconnected unexpectedly (will rebind)")
-                playerConnectionFlow.value = null
-            }
+            Timber.tag("TvMainActivity").w("Music service disconnected")
+            disposePlayerConnection()
         }
     }
 

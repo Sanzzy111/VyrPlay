@@ -211,6 +211,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -3314,15 +3315,26 @@ class MusicService :
         connectivityObserver.unregister()
         abandonAudioFocus()
         releaseLoudnessEnhancer()
-        mediaSession.release()
-        player.removeListener(this)
-        player.removeListener(sleepTimer)
-        playerSilenceProcessors.remove(player)
-        // Note: equalizerService audio processors are cleared in equalizerService.release() if needed,
-        // or we can't easily reference the specific processor created in createExoPlayer here without storing it.
-        // But since we are destroying the service, it's fine.
-        player.release()
+        playerInitialized.value = false
+        _playerFlow.value = null
+        crossfadeTriggerJob?.cancel()
+        crossfadeJob?.cancel()
+        retryJob?.cancel()
+        videoSwitchJob?.cancel()
+        widgetUpdateJob?.cancel()
         discordUpdateJob?.cancel()
+        scope.cancel()
+        mediaSession.release()
+        listOfNotNull(secondaryPlayer, fadingPlayer, player).distinct().forEach { playerToRelease ->
+            playerToRelease.removeListener(this)
+            playerToRelease.removeListener(sleepTimer)
+            playerSilenceProcessors.remove(playerToRelease)
+            playerToRelease.stop()
+            playerToRelease.release()
+        }
+        secondaryPlayer = null
+        fadingPlayer = null
+        isCrossfading = false
         super.onDestroy()
     }
 
@@ -4135,46 +4147,59 @@ class MusicService :
             return
         }
 
-        isCrossfading = true
         val nextPlayer = secondaryPlayer ?: return
-        val currentPlayer = player
-        
-        fadingPlayer = currentPlayer
-        player = nextPlayer
-        _playerFlow.value = player
-        secondaryPlayer = null
-        
-        fadingPlayer?.removeListener(this)
-        fadingPlayer?.removeListener(sleepTimer)
-        
-        // Add listener to sync play/pause state
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isCrossfading && fadingPlayer != null) {
-                    if (isPlaying) {
-                        fadingPlayer?.play()
-                    } else {
-                        fadingPlayer?.pause()
-                    }
-                } else {
-                    player.removeListener(this)
-                }
-            }
-        })
+        val oldPlayer = player
+        isCrossfading = true
 
         nextPlayer.removeListener(secondaryPlayerListener)
         nextPlayer.addListener(this)
         nextPlayer.addListener(sleepTimer)
-        // Add PlaybackStatsListener to the new player for history tracking
         nextPlayer.addAnalyticsListener(PlaybackStatsListener(false, this@MusicService))
-        
-        sleepTimer.player = player
-        
+
+        // Move MediaSession first. Never publish/release the old player if the session rejects
+        // the replacement, otherwise controllers can retain a player that we have destroyed.
         try {
-            (mediaSession as MediaSession).player = player
+            mediaSession.player = nextPlayer
         } catch (e: Exception) {
-            timber.log.Timber.e(e, "Failed to swap player in MediaSession")
+            Timber.tag(TAG).e(e, "Failed to swap player in MediaSession")
+            nextPlayer.removeListener(this)
+            nextPlayer.removeListener(sleepTimer)
+            nextPlayer.stop()
+            nextPlayer.clearMediaItems()
+            playerSilenceProcessors.remove(nextPlayer)
+            nextPlayer.release()
+            secondaryPlayer = null
+            isCrossfading = false
+            scheduleCrossfade()
+            return
         }
+
+        fadingPlayer = oldPlayer
+        player = nextPlayer
+        secondaryPlayer = null
+        sleepTimer.player = nextPlayer
+
+        oldPlayer.removeListener(this)
+        oldPlayer.removeListener(sleepTimer)
+
+        // Add listener to sync play/pause state
+        val playbackBridge = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isCrossfading && fadingPlayer === oldPlayer) {
+                    if (isPlaying) {
+                        oldPlayer.play()
+                    } else {
+                        oldPlayer.pause()
+                    }
+                } else {
+                    nextPlayer.removeListener(this)
+                }
+            }
+        }
+        nextPlayer.addListener(playbackBridge)
+
+        // Publish only after the service, session, and listeners agree on the active player.
+        _playerFlow.value = nextPlayer
         
         crossfadeJob = scope.launch {
             val duration = crossfadeDuration.toLong()
@@ -4184,12 +4209,12 @@ class MusicService :
             // duck/mute/ramp value. The player reference changed above, so the volume flow does
             // not emit again automatically after the swap.
             val startVolume = if (isMuted.value) 0f else playerVolume.value
-            player.volume = startVolume * 0.01f
+            nextPlayer.volume = startVolume * 0.01f
             
             for (i in 0..steps) {
                 if (!isActive) break
                 // Pause volume ramp if player is paused
-                while (!player.isPlaying && isActive) {
+                while (!nextPlayer.isPlaying && isActive) {
                     delay(100)
                 }
                 
@@ -4207,16 +4232,17 @@ class MusicService :
                 }
                 
                 try {
-                    player.volume = startVolume * fadeIn
-                    fadingPlayer?.volume = startVolume * fadeOut
+                    nextPlayer.volume = startVolume * fadeIn
+                    oldPlayer.volume = startVolume * fadeOut
                 } catch (e: Exception) { break }
                 
                 delay(stepTime)
             }
             
             try {
-                fadingPlayer?.volume = 0f
-                player.volume = startVolume
+                oldPlayer.volume = 0f
+                nextPlayer.volume = startVolume
+                nextPlayer.removeListener(playbackBridge)
                 cleanupCrossfade()
             } catch (e: Exception) { }
         }
