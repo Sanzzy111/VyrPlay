@@ -1,3 +1,88 @@
+# AuraMusic v3.0.0 (Build 27) Release Notes
+
+> [!NOTE]
+> AuraMusic 3.0 is a major playback, lyrics, Android TV, recommendation, account, updater, and release-distribution update. It adds two lyrics providers, brings AutoMix to streamed music, significantly expands the TV experience, and introduces APKs tailored to each supported installation type.
+
+## What's New
+
+### AutoMix and Playback
+
+- Added AutoMix controls to mobile and Android TV playback settings.
+- Added AutoMix support for songs streamed directly from the internet, not only downloaded songs.
+- Improved transition scheduling, duration readiness, and crossfade preference handling.
+- Preserved Repeat One and Repeat All behavior while AutoMix is enabled.
+- Added service-owned AutoMix queue extension so TV and background playback always show an upcoming track.
+- Smoothed TV AutoMix volume ramps and audio-session handoff to reduce transition artifacts.
+- Improved playback transition stability and player reconnection on Android TV.
+- Fixed the Android Auto descriptor so the app is detected correctly.
+
+### Lyrics: Musixmatch and Paxsenix
+
+- Added the Paxsenix lyrics provider with synchronized Apple Music catalog lyrics.
+- Added the Musixmatch provider with RichSync word timing, synchronized subtitles, and plain-lyrics fallback.
+- Fixed Musixmatch token/API requests and support for JSON responses served as `text/plain`.
+- Preserved spaces in Musixmatch word-synchronized lyrics.
+- Initialized Paxsenix at application startup so it is ready for the first lyrics request.
+- Added provider controls and ordering support in mobile and TV settings.
+
+### Android TV Player and Navigation
+
+- Added persistent expanded lyrics to the TV player, with stale-result protection when songs change.
+- Added expanded video playback using the available player panel.
+- Added a Like button that updates the local library and syncs with YouTube Music when signed in.
+- Improved the visible queue so AutoMix additions appear as playback advances.
+- Added full-screen focused artwork backgrounds throughout the TV Library, including songs, playlists, albums, and artists.
+- Improved video surfaces, buffering states, seek restoration, and playback after navigating away and back.
+- Reworked top-bar, back-button, overlay, section, player-control, and D-pad focus behavior.
+- Kept the top bar available while making the mini player responsive on smaller TV layouts.
+- Fixed player/service binding recovery and several transition-time stability issues.
+
+### Android TV Settings, Home, and Recommendations
+
+- Added complete Last.fm TV settings with login/logout, scrobbling, now-playing updates, and like synchronization.
+- Fixed Last.fm sub-settings navigation and focus behavior.
+- Improved Google TV recommendations and TV home metadata filtering.
+- Removed empty home sections and invalid/null content items.
+- Improved TV search, settings, and player layouts to prevent focus traps and overlapping controls.
+
+### Radio, Accounts, and Integrations
+
+- Improved radio recommendations by removing duplicate, already queued, explicit, and hidden-video candidates.
+- Protected radio results from being applied after the user changes songs or queues.
+- Improved YouTube Music login persistence on mobile and TV so authenticated users no longer fall back to Guest.
+- Fixed Discord OAuth `invalid_scope` login failures.
+- Updated the Discord community invite link.
+
+### Updates and Release APKs
+
+- Added signed standalone release variants for ARM64, Armeabi/ARMv7, x86, and x86_64.
+- Kept universal FOSS mobile, Google Cast mobile, and FOSS TV as dedicated release variants.
+- Standardized release filenames:
+  - `AuraMusic.apk`
+  - `AuraMusic-with-Google-Cast.apk`
+  - `AuraMusic-Tv.apk`
+  - `AuraMusic-arm64.apk`
+  - `AuraMusic-armeabi.apk`
+  - `AuraMusic-x86.apk`
+  - `AuraMusic-x86_64.apk`
+- Updated the in-app updater to detect and select the correct flavor and architecture.
+- Added installed architecture/variant information to Update and About settings.
+- Fixed CI release signing paths for every APK variant.
+
+### Localization
+
+- Added and refined Korean translations and Fastlane store metadata, contributed by @윤성.
+
+## Contributors
+
+- @chila254 — features, fixes, integrations, TV work, playback, lyrics, updater, and release engineering
+- @윤성 — Korean translations
+- @TeamAuraMusic — v2.9.0 release automation included at the start of this development range
+
+**Complete commit range (38 commits):** `03d919e` through `e446e6a`, inclusive
+
+**Full diff:** https://github.com/TeamAuraMusic/AuraMusic/compare/2578c64c0966569721aba26f46aba4b914bf4245...e446e6ab46b55bfcb969de55f70eedb41557915d
+
 # AuraMusic v2.9.0 (Build 26) Release Notes
 
 # AuraMusic v2.9.0 (Build 26) Release Notes

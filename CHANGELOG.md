@@ -1,3 +1,84 @@
+# AuraMusic v3.0.0 (Build 27) Changelog
+
+> [!NOTE]
+> This changelog covers all 38 commits from `03d919e` through `e446e6a`, inclusive. No commits in the requested range are omitted.
+
+## Major Features
+
+### AutoMix and Playback
+- Added AutoMix settings on mobile and TV.
+- Added streamed-song AutoMix and service-owned automatic queue extension.
+- Preserved repeat modes and improved trigger scheduling, duration readiness, transition stability, and TV audio handoff.
+- Improved radio candidate quality and protected queues from stale asynchronous results.
+- Fixed Android Auto discovery with the correct descriptor format.
+
+### Lyrics Providers
+- Integrated Paxsenix synchronized lyrics and initialized it during app startup.
+- Integrated Musixmatch RichSync, synchronized subtitle, and plain-lyrics fallbacks.
+- Fixed Musixmatch request formatting, `text/plain` JSON deserialization, word spacing, provider ordering, and TV presentation.
+
+### Android TV
+- Reworked player, top bar, back navigation, overlays, D-pad focus, mini-player sizing, and section navigation.
+- Improved video rendering, loading, seeking, surface restoration, and song transitions.
+- Added persistent expanded lyrics, expanded video, a YouTube Music-synced Like button, and a live AutoMix queue.
+- Added full-screen focused artwork to the Library.
+- Added Last.fm settings with authentication, scrobbling, now-playing, and like synchronization.
+- Improved TV home filtering, recommendations, search, settings navigation, and Android 14 playback stability.
+
+### Accounts, Updates, and Distribution
+- Improved YouTube Music login persistence on mobile and TV.
+- Fixed Discord OAuth scope handling and updated the Discord invite.
+- Added standalone ABI release flavors and canonical FOSS, GMS, TV, ARM64, Armeabi, x86, and x86_64 APK assets.
+- Updated updater architecture detection, installed-variant labels, workflow signing, and release artifact selection.
+
+### Localization
+- Added Korean app and store-listing translations by @윤성.
+
+## Full Changelog — All 38 Commits
+
+- chore(release): prepare v2.9.0 (Build 26) - Discord OAuth2 rewrite, video/SponsorBlock fixes ([03d919e](https://github.com/TeamAuraMusic/AuraMusic/commit/03d919efb4fcc2840fa7d5a20972b886229a66c2)) — chila254
+- chore(release): v2.9.0 (build 26) ([a70ddde](https://github.com/TeamAuraMusic/AuraMusic/commit/a70dddefa61fcaf69a6a3bc3cd67d11b8c07502a)) — TeamAuraMusic
+- Added translation using Weblate (Korean) ([2894a09](https://github.com/TeamAuraMusic/AuraMusic/commit/2894a090686a8d21a5a4bdf09ef8d2e15de033f3)) — 윤성
+- Translated using Weblate (Korean) ([b336081](https://github.com/TeamAuraMusic/AuraMusic/commit/b3360814ee28810671578f4ccadce9c23e47d418)) — 윤성
+- Translated using Weblate (Korean) ([ec40ccd](https://github.com/TeamAuraMusic/AuraMusic/commit/ec40ccd9e926d8f79e0705aeaae3ae70e2e30002)) — 윤성
+- fix(tv): compact mini player, preserve the top bar, stop music on exit, restore video position, and improve buffering state ([e5d9692](https://github.com/TeamAuraMusic/AuraMusic/commit/e5d9692c2093784d2a9c0269ff5f8afd6b468d78)) — chila254
+- fix(tv): hide mini player in player screen, reset overlays from navigation, move back below top bar, and compact detail panel ([3594e11](https://github.com/TeamAuraMusic/AuraMusic/commit/3594e11038ed47863f06e692a5e448fb4ff6cd19)) — chila254
+- revert(tv): restore detail panel to 360dp with original padding ([0c79b41](https://github.com/TeamAuraMusic/AuraMusic/commit/0c79b41298121a64b6cfa83d444f15210905af21)) — chila254
+- fix(tv): prevent false video loading when returning to the player ([8a92956](https://github.com/TeamAuraMusic/AuraMusic/commit/8a9295619a2d0528b2437b1dd905d4438419c5ec)) — chila254
+- fix(tv): keep PlayerView visible in video mode and overlay loading state ([e8fd37e](https://github.com/TeamAuraMusic/AuraMusic/commit/e8fd37e11f59cf0838d872367f11a3839219888b)) — chila254
+- fix(tv): stabilize playback/navigation, overlay reset, focus, back behavior, and top-level selection ([ee5d5be](https://github.com/TeamAuraMusic/AuraMusic/commit/ee5d5befbdac7d495135a2b2be6542a2c5a96bc8)) — chila254
+- fix(tv): move player back button into the top bar ([f2ae851](https://github.com/TeamAuraMusic/AuraMusic/commit/f2ae851b50d27676e8e42cc80f08804fdc9eb721)) — chila254
+- fix(tv): resolve TvPlayer and BackHandler build errors ([eafeefe](https://github.com/TeamAuraMusic/AuraMusic/commit/eafeefe075ed6fe82bbe678ecec5098ec3cfd8d2)) — chila254
+- fix(tv): restore missing TvPlayer closing brace ([f8a7d4a](https://github.com/TeamAuraMusic/AuraMusic/commit/f8a7d4ad7cee80cb8115618a813d275149c12c3b)) — chila254
+- fix(tv): improve D-pad player focus and restore video surfaces after navigation ([5b664d6](https://github.com/TeamAuraMusic/AuraMusic/commit/5b664d667554737f57fb520ab6b5eb342cdec85b)) — chila254
+- Fixed Android Auto by using the correct descriptor format ([b1b3b7d](https://github.com/TeamAuraMusic/AuraMusic/commit/b1b3b7d0ed86f6157a86e2b1a33ee670c424d47e)) — chila254
+- feat(lyrics): integrate Paxsenix synchronized Apple Music lyrics ([1eaa547](https://github.com/TeamAuraMusic/AuraMusic/commit/1eaa54719377ce943ff3e2ce4e540bd49da96f79)) — chila254
+- feat(tv): add lyrics expansion, Last.fm navigation, and Paxsenix settings support ([2c2f45e](https://github.com/TeamAuraMusic/AuraMusic/commit/2c2f45e2b5334b5c7f13aacafb8c320c4d80f324)) — chila254
+- fix(lyrics): initialize Paxsenix synchronously and filter empty/null home sections ([02d5123](https://github.com/TeamAuraMusic/AuraMusic/commit/02d51235c739e8a5c0c3e28deb91da7bed539419)) — chila254
+- fix: repair HomeViewModel toggleChip syntax ([a26df25](https://github.com/TeamAuraMusic/AuraMusic/commit/a26df2580cddd75f5dfa4e08165552ada14902ce)) — chila254
+- feat(tv): add complete Last.fm settings, scrobbling, now-playing, and like sync ([f071acc](https://github.com/TeamAuraMusic/AuraMusic/commit/f071acc683a7944327f523a81c08f700d51b6459)) — chila254
+- fix(tv): repair Last.fm settings compilation and navigation ([9e85824](https://github.com/TeamAuraMusic/AuraMusic/commit/9e858241cbdf34ffe461ed9f2598844de853b7c5)) — chila254
+- fix: add missing AutoMix preference import in MusicService ([9983807](https://github.com/TeamAuraMusic/AuraMusic/commit/99838078f788bc016030fa715aa24e1462821efa)) — chila254
+- fix(automix): preserve settings, correct trigger calculation, and retry duration readiness ([0289236](https://github.com/TeamAuraMusic/AuraMusic/commit/0289236b3c45e5bed9a04e2161a19aae2b2ea664)) — chila254
+- feat(settings): add AutoMix controls to mobile and TV ([a783882](https://github.com/TeamAuraMusic/AuraMusic/commit/a7838829e34db9d484cdd7252e6a09a475d2363f)) — chila254
+- fix: add missing AutoMix preference import in TV settings ([8d46dbf](https://github.com/TeamAuraMusic/AuraMusic/commit/8d46dbfc79c09afc952f3dc452223917778f2675)) — chila254
+- fix(automix): move crossfade trigger from 80% to 95% ([6cee48a](https://github.com/TeamAuraMusic/AuraMusic/commit/6cee48a23fe48f1b71be260c27aa40cc76b232a8)) — chila254
+- fix: improve AutoMix, radio suggestions, TV UI/recommendations, and login persistence ([dec1276](https://github.com/TeamAuraMusic/AuraMusic/commit/dec12765ab22ceb10bedfd944d0995f086b678c4)) — chila254
+- feat(lyrics): integrate Musixmatch with synchronized lyrics ([87f23ce](https://github.com/TeamAuraMusic/AuraMusic/commit/87f23ce29f5757185b4b5dc28dc2e64b06c0acfc)) — chila254
+- fix(playback): support streamed AutoMix, preserve repeat modes, and repair TV lyrics/Last.fm navigation ([ac6f810](https://github.com/TeamAuraMusic/AuraMusic/commit/ac6f81053bbe6b1017b0d9e5779294df4ddf747c)) — chila254
+- fix(lyrics): add Musixmatch `format=json` requests ([a1cd7ba](https://github.com/TeamAuraMusic/AuraMusic/commit/a1cd7ba8689fa42e9ab319ac12a7efb246fd0123)) — chila254
+- Implement the release architecture/flavor contract across CI and the updater ([daac1c5](https://github.com/TeamAuraMusic/AuraMusic/commit/daac1c5d15492e4eca9d6bac830265c6df5c1547)) — chila254
+- fix(tv): stabilize playback transitions, restore lyrics toggle, and align release variants ([e76a0fd](https://github.com/TeamAuraMusic/AuraMusic/commit/e76a0fd3fa81e488f5d598b444b86a53fbd98124)) — chila254
+- fix(updater): show installed APK details and repair release signing ([32df5d9](https://github.com/TeamAuraMusic/AuraMusic/commit/32df5d93abf371add66cfacce03a42b947461046)) — chila254
+- fix(lyrics): deserialize Musixmatch text responses as JSON ([3c7bc8c](https://github.com/TeamAuraMusic/AuraMusic/commit/3c7bc8cda32f8831b1bd3f47aeb84f91edc45853)) — chila254
+- fix(lyrics): restore spacing, persist TV view, and update queue ([a84c88f](https://github.com/TeamAuraMusic/AuraMusic/commit/a84c88f7880cfa23ad17e71af56cf4b309c07742)) — chila254
+- fix(tv): stabilize playback UI and improve player controls ([84f6619](https://github.com/TeamAuraMusic/AuraMusic/commit/84f6619ff07ed04263891001af3bdb1582eaa289)) — chila254
+- fix(tv): preserve lyrics, smooth AutoMix, and add Library backdrops ([e446e6a](https://github.com/TeamAuraMusic/AuraMusic/commit/e446e6ab46b55bfcb969de55f70eedb41557915d)) — chila254
+
+**Complete commit range:** `03d919e` through `e446e6a`, inclusive
+
+**Full diff:** https://github.com/TeamAuraMusic/AuraMusic/compare/2578c64c0966569721aba26f46aba4b914bf4245...e446e6ab46b55bfcb969de55f70eedb41557915d
+
 # AuraMusic v2.9.0 (Build 26) Changelog
 
 # AuraMusic v2.9.0 (Build 26) Release Notes
