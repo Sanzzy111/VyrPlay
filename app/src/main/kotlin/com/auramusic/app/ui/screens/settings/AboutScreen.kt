@@ -194,7 +194,17 @@ fun AboutScreen(
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
                     Text(
-                        text = BuildConfig.ARCHITECTURE.uppercase(),
+                        text = buildString {
+                            append(BuildConfig.ARCHITECTURE.uppercase())
+                            append(" • ")
+                            append(
+                                when {
+                                    BuildConfig.CAST_AVAILABLE -> "GMS"
+                                    BuildConfig.ARCHITECTURE != "universal" -> "STANDALONE"
+                                    else -> "FOSS"
+                                }
+                            )
+                        },
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,

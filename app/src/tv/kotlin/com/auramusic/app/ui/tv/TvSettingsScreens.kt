@@ -608,7 +608,7 @@ import java.util.concurrent.atomic.AtomicReference
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = BuildConfig.ARCHITECTURE.uppercase(),
+                        text = "${BuildConfig.ARCHITECTURE.uppercase()} • FOSS TV",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

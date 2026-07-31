@@ -299,10 +299,10 @@ jobs:
           RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
         run: |
           set -euo pipefail
-          mkdir -p keystore
-          echo "$DEBUG_KEYSTORE" | base64 -d > keystore/debug.keystore
-          echo "$RELEASE_KEYSTORE" | base64 -d > keystore/release.keystore
-          ls -la keystore/
+          mkdir -p app/keystore
+          echo "$DEBUG_KEYSTORE" | base64 -d > app/keystore/debug.keystore
+          echo "$RELEASE_KEYSTORE" | base64 -d > app/keystore/release.keystore
+          ls -la app/keystore/
 
       - name: Create local.properties
         run: |
@@ -314,7 +314,7 @@ jobs:
           LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}
 
-          # Debug keystore
+          # Paths are resolved relative to the app module
           debug.storeFile=keystore/debug.keystore
           debug.storePassword=${{ secrets.DEBUG_STORE_PASSWORD }}
           debug.keyAlias=${{ secrets.DEBUG_KEY_ALIAS }}

@@ -44,9 +44,9 @@ jobs:
           DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
           RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
         run: |
-          mkdir -p keystore
-          echo "$DEBUG_KEYSTORE" | base64 -d > keystore/debug.keystore
-          echo "$RELEASE_KEYSTORE" | base64 -d > keystore/release.keystore
+          mkdir -p app/keystore
+          echo "$DEBUG_KEYSTORE" | base64 -d > app/keystore/debug.keystore
+          echo "$RELEASE_KEYSTORE" | base64 -d > app/keystore/release.keystore
 
       - name: Create local.properties
         run: |
@@ -57,13 +57,13 @@ jobs:
           LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}
      
-          # Debug keystore (root level)
+          # Paths are resolved relative to the app module
           debug.storeFile=keystore/debug.keystore
           debug.storePassword=${{ secrets.DEBUG_STORE_PASSWORD }}
           debug.keyAlias=${{ secrets.DEBUG_KEY_ALIAS }}
           debug.keyPassword=${{ secrets.DEBUG_KEY_PASSWORD }}
      
-          # Release keystore (root level)
+          # Release keystore
           release.storeFile=keystore/release.keystore
           release.storePassword=${{ secrets.RELEASE_STORE_PASSWORD }}
           release.keyAlias=${{ secrets.RELEASE_KEY_ALIAS }}

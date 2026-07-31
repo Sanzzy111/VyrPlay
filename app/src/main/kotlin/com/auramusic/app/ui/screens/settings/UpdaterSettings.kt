@@ -125,7 +125,11 @@ fun UpdaterScreen(
                     },
                     description = {
                         val arch = BuildConfig.ARCHITECTURE
-                        val variant = if (BuildConfig.CAST_AVAILABLE) "GMS" else "FOSS"
+                        val variant = when {
+                            BuildConfig.CAST_AVAILABLE -> "GMS"
+                            arch != "universal" -> "Standalone"
+                            else -> "FOSS"
+                        }
                         Text("$arch - $variant")
                     }
                 )
