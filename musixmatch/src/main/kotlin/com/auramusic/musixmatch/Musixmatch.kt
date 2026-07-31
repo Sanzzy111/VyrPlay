@@ -16,6 +16,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.encodeURLParameter
 import io.ktor.serialization.kotlinx.json.json
 import java.net.URI
@@ -42,7 +43,11 @@ private const val FALLBACK_SECRET = "IEJ5E8XFaHQvIQNfs7IC"
 private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 private val client = HttpClient(OkHttp) {
     expectSuccess = false
-    install(ContentNegotiation) { json(json) }
+    install(ContentNegotiation) {
+        json(json)
+        // Musixmatch serves its JSON API responses as text/plain.
+        json(json, ContentType.Text.Plain)
+    }
     install(ContentEncoding) { gzip(); deflate() }
 }
 
