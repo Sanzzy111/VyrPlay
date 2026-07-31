@@ -466,6 +466,7 @@ class MusicService :
     private val instantSilenceSkipEnabled = MutableStateFlow(false)
 
     private var isAudioEffectSessionOpened = false
+    private var audioEffectSessionId = C.AUDIO_SESSION_ID_UNSET
     private var loudnessEnhancer: LoudnessEnhancer? = null
 
     @Volatile private var discordRpcEnabled = false
@@ -2045,11 +2046,14 @@ class MusicService :
 
     private fun openAudioEffectSession() {
         if (isAudioEffectSessionOpened) return
+        val sessionId = player.audioSessionId
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId <= 0) return
         isAudioEffectSessionOpened = true
+        audioEffectSessionId = sessionId
         setupLoudnessEnhancer()
         sendBroadcast(
             Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
-                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
                 putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
                 putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
             },
@@ -2058,11 +2062,13 @@ class MusicService :
 
     private fun closeAudioEffectSession() {
         if (!isAudioEffectSessionOpened) return
+        val sessionId = audioEffectSessionId
         isAudioEffectSessionOpened = false
+        audioEffectSessionId = C.AUDIO_SESSION_ID_UNSET
         releaseLoudnessEnhancer()
         sendBroadcast(
             Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
-                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
                 putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
             },
         )
@@ -4230,13 +4236,11 @@ class MusicService :
             val duration = crossfadeDuration.toLong()
             val steps = 20
             val stepTime = duration / steps
-            // Use the persisted target volume rather than the outgoing player's temporary
-            // duck/mute/ramp value. The player reference changed above, so the volume flow does
-            // not emit again automatically after the swap.
-            val startVolume = if (isMuted.value) 0f else playerVolume.value
-            nextPlayer.volume = startVolume * 0.01f
+            val targetVolume = if (isMuted.value) 0f else playerVolume.value
+            val outgoingStartVolume = oldPlayer.volume
+            nextPlayer.volume = 0f
             
-            for (i in 0..steps) {
+            for (i in 1..steps) {
                 if (!isActive) break
                 // Pause volume ramp if player is paused
                 while (!nextPlayer.isPlaying && isActive) {
@@ -4257,8 +4261,8 @@ class MusicService :
                 }
                 
                 try {
-                    nextPlayer.volume = startVolume * fadeIn
-                    oldPlayer.volume = startVolume * fadeOut
+                    nextPlayer.volume = targetVolume * fadeIn
+                    oldPlayer.volume = outgoingStartVolume * fadeOut
                 } catch (e: Exception) { break }
                 
                 delay(stepTime)
@@ -4266,9 +4270,13 @@ class MusicService :
             
             try {
                 oldPlayer.volume = 0f
-                nextPlayer.volume = startVolume
+                nextPlayer.volume = targetVolume
                 nextPlayer.removeListener(playbackBridge)
+                // Let the TV AudioTrack drain its final silent buffer before releasing it.
+                delay(100)
+                closeAudioEffectSession()
                 cleanupCrossfade()
+                openAudioEffectSession()
             } catch (e: Exception) { }
         }
     }

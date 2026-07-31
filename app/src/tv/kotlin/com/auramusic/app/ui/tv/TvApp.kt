@@ -1905,6 +1905,36 @@ fun TvLibraryScreen(
 
     // Track which content section (row) is currently focused
     var focusedItemIndex by remember { mutableStateOf(-1) }
+    var focusedLibraryItem by remember { mutableStateOf<FocusedItemInfo?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        focusedLibraryItem?.thumbnailUrl?.let { thumbnailUrl ->
+            AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = 0.55f
+                        scaleX = 1.04f
+                        scaleY = 1.04f
+                    },
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.72f),
+                                Color.Black.copy(alpha = 0.52f),
+                                Color.Black.copy(alpha = 0.78f),
+                            )
+                        )
+                    )
+            )
+        }
 
     LazyColumn(
         modifier = Modifier
@@ -1942,7 +1972,8 @@ fun TvLibraryScreen(
                     title = "Liked songs",
                     songs = songs,
                     onSongClick = { song: Song -> playerConnection?.playSong(song) },
-                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 1 }
+                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 1 },
+                    onItemFocused = { focusedLibraryItem = it },
                 )
             }
         }
@@ -1952,7 +1983,8 @@ fun TvLibraryScreen(
                     title = "Playlists", 
                     localItems = playlists, 
                     playerConnection = playerConnection,
-                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 2 }
+                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 2 },
+                    onItemFocused = { focusedLibraryItem = it },
                 ) 
             }
         }
@@ -1962,7 +1994,8 @@ fun TvLibraryScreen(
                     title = "Subscribed artists",
                     localItems = artists,
                     playerConnection = playerConnection,
-                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 3 }
+                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 3 },
+                    onItemFocused = { focusedLibraryItem = it },
                 )
             }
         }
@@ -1972,7 +2005,8 @@ fun TvLibraryScreen(
                     title = "Albums", 
                     localItems = albums, 
                     playerConnection = playerConnection,
-                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 4 }
+                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) focusedItemIndex = 4 },
+                    onItemFocused = { focusedLibraryItem = it },
                 ) 
             }
         }
@@ -2000,6 +2034,7 @@ fun TvLibraryScreen(
                 }
             }
         }
+    }
     }
 }
 

@@ -145,7 +145,9 @@ import timber.log.Timber
 
     // Method to update TV lyrics without database storage
     fun updateTvLyrics(songId: String, lyrics: String, provider: String) {
-        tvLyricsFlow.value = LyricsEntity(songId, lyrics, provider)
+        if (songId == mediaMetadata.value?.id) {
+            tvLyricsFlow.value = LyricsEntity(songId, lyrics, provider)
+        }
     }
 
     val currentLyrics = mediaMetadata.flatMapLatest { mediaMetadata ->

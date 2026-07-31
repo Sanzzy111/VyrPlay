@@ -260,9 +260,9 @@ fun TvPlayerScreen(
     var sleepTimerMinutes by remember { mutableStateOf<Int?>(null) }
     var sleepTimerEndTime by remember { mutableStateOf<Long?>(null) }
     var sleepTimerMessage by remember { mutableStateOf<String?>(null) }
-    // Wire to ShowLyricsKey so MusicService fetches lyrics for the current song
+    // Keep TV's expanded-lyrics mode independent from mobile and voice-command UI state.
     val (showLyrics, onShowLyricsChange) = com.auramusic.app.utils.rememberPreference(
-        com.auramusic.app.constants.ShowLyricsKey,
+        com.auramusic.app.constants.TvShowLyricsKey,
         false,
     )
     // On TV, enabling lyrics always means expanded mode. The preference survives
@@ -372,6 +372,7 @@ fun TvPlayerScreen(
                 val fetched = lyricsHelper.getLyrics(mediaMetadata)
                 pc.updateTvLyrics(mediaMetadata.id, fetched.lyrics, fetched.provider)
             } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 pc.updateTvLyrics(
                     mediaMetadata.id,
                     com.auramusic.app.db.entities.LyricsEntity.LYRICS_NOT_FOUND,
