@@ -113,23 +113,17 @@ object Updater {
             val downloadUrl = asset.getString("browser_download_url")
             val size = asset.getLong("size")
             
-            // Parse architecture and variant from filename
+            // Canonical names deliberately accept only the published contract values.
             val (arch, variant) = when {
+                name.matches(Regex("AuraMusic-(foss|gms)-(universal|arm64|armeabi|x86|x86_64)\\.apk")) -> {
+                    val parts = name.removePrefix("AuraMusic-").removeSuffix(".apk").split("-")
+                    parts[1] to parts[0]
+                }
+                name == "AuraMusic-tv-universal.apk" -> "universal" to "tv"
+                // Legacy universal release names retained for existing releases.
                 name == "Auramusic.apk" || name == "AuraMusic.apk" -> "universal" to "foss"
                 name == "Auramusic-with-Google-Cast.apk" || name == "AuraMusic-with-Google-Cast.apk" -> "universal" to "gms"
                 name == "AuraMusic-Tv.apk" || name == "Auramusic-Tv.apk" -> "universal" to "tv"
-                name.startsWith("app-") && name.endsWith("-release.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-release.apk")
-                    arch to "foss"
-                }
-                name.startsWith("app-") && name.endsWith("-with-Google-Cast.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-with-Google-Cast.apk")
-                    arch to "gms"
-                }
-                name.startsWith("app-") && name.endsWith("-tv.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-tv.apk")
-                    arch to "tv"
-                }
                 else -> null to null
             }
             
@@ -271,29 +265,33 @@ object Updater {
 
     /**
      * Get the download URL for the correct app variant.
-     * @param preferredVariant Override variant selection ("foss" or "gms").
+     * @param preferredVariant Override variant selection ("foss", "gms", or "tv").
      *        When null, uses the current build's variant.
+     * @param preferredArchitecture Override architecture, or "automatic" for this build's architecture.
      */
-    fun getDownloadUrlForCurrentVariant(releaseInfo: ReleaseInfo, preferredVariant: String? = null): String? {
+    fun getDownloadUrlForCurrentVariant(
+        releaseInfo: ReleaseInfo,
+        preferredVariant: String? = null,
+        preferredArchitecture: String? = null,
+    ): String? {
         val (currentArch, _) = getCurrentAppVariant()
         val variant = preferredVariant ?: getCurrentAppVariant().second
-        
+        val architecture = preferredArchitecture
+            ?.takeUnless { it == "automatic" }
+            ?: currentArch
+
         // First try to find exact match
         val exactMatch = releaseInfo.assets
-            .find { it.architecture == currentArch && it.variant == variant }
+            .find { it.architecture == architecture && it.variant == variant }
             ?.downloadUrl
         
         if (exactMatch != null) return exactMatch
         
-        // Fallback: if we can't find exact match, try to find any APK for this variant
+        // The only safe fallback is the universal APK of the selected flavor.
         val fallbackMatch = releaseInfo.assets
-            .find { it.variant == variant }
+            .find { it.architecture == "universal" && it.variant == variant }
             ?.downloadUrl
-        
-        if (fallbackMatch != null) return fallbackMatch
-        
-        // Last resort: return any available APK
-        return releaseInfo.assets.firstOrNull()?.downloadUrl
+        return fallbackMatch
     }
 
     /**

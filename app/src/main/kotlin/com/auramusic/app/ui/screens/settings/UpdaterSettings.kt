@@ -40,6 +40,7 @@ import com.auramusic.app.BuildConfig
 import com.auramusic.app.LocalPlayerAwareWindowInsets
 import com.auramusic.app.R
 import com.auramusic.app.constants.CheckForUpdatesKey
+import com.auramusic.app.constants.UpdateArchitectureKey
 import com.auramusic.app.constants.UpdateNotificationsEnabledKey
 import com.auramusic.app.constants.UpdateVariantKey
 import com.auramusic.app.ui.component.IconButton
@@ -62,6 +63,7 @@ fun UpdaterScreen(
     val (updateNotifications, onUpdateNotificationsChange) = rememberPreference(UpdateNotificationsEnabledKey, true)
     val defaultVariant = if (BuildConfig.CAST_AVAILABLE) "gms" else "foss"
     val (updateVariant, onUpdateVariantChange) = rememberPreference(UpdateVariantKey, defaultVariant)
+    val (updateArchitecture, onUpdateArchitectureChange) = rememberPreference(UpdateArchitectureKey, "automatic")
     
     var isChecking by remember { mutableStateOf(false) }
     var updateAvailable by remember { mutableStateOf(false) }
@@ -197,6 +199,34 @@ fun UpdaterScreen(
                     onClick = { onUpdateVariantChange("gms") }
                 )
             )
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Material3SettingsGroup(
+            title = "APK Architecture",
+            items = listOf(
+                "automatic" to "Automatic / current device (${BuildConfig.ARCHITECTURE})",
+                "universal" to "Universal",
+                "arm64" to "ARM64 (manual; may be incompatible)",
+                "armeabi" to "ARMv7 (armeabi) (manual; may be incompatible)",
+                "x86" to "x86 (manual; may be incompatible)",
+                "x86_64" to "x86_64 (manual; may be incompatible)",
+            ).map { (value, label) ->
+                Material3SettingsItem(
+                    title = { Text(label) },
+                    description = if (value == "automatic" || value == "universal") null else {
+                        { Text("Falls back to Universal when this APK is unavailable") }
+                    },
+                    trailingContent = {
+                        androidx.compose.material3.RadioButton(
+                            selected = updateArchitecture == value,
+                            onClick = { onUpdateArchitectureChange(value) },
+                        )
+                    },
+                    onClick = { onUpdateArchitectureChange(value) },
+                )
+            },
         )
 
         Spacer(Modifier.height(16.dp))

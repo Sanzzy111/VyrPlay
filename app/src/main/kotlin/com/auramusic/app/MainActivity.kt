@@ -148,6 +148,7 @@ import com.auramusic.app.constants.SlimNavBarKey
 import com.auramusic.app.constants.ListenTogetherAtTopKey
 import com.auramusic.app.constants.StopMusicOnTaskClearKey
 import com.auramusic.app.constants.UpdateNotificationsEnabledKey
+import com.auramusic.app.constants.UpdateArchitectureKey
 import com.auramusic.app.constants.UpdateVariantKey
 import com.auramusic.app.constants.UseNewMiniPlayerDesignKey
 import com.auramusic.app.constants.SelectedFontKey
@@ -414,6 +415,7 @@ class MainActivity : ComponentActivity() {
                     val updatesEnabled = dataStore.get(CheckForUpdatesKey, true)
                     val notifEnabled = dataStore.get(UpdateNotificationsEnabledKey, true)
                     val preferredVariant = dataStore.get(UpdateVariantKey, if (BuildConfig.CAST_AVAILABLE) "gms" else "foss")
+                    val preferredArchitecture = dataStore.get(UpdateArchitectureKey, "automatic")
                     if (!updatesEnabled) return@withContext
                     
                     Updater.checkForUpdate(forceRefresh = true).onSuccess { (releaseInfo, hasUpdate) ->
@@ -447,7 +449,7 @@ class MainActivity : ComponentActivity() {
                             
                             // If there's a new version available, show notification
                             if (hasUpdate && notifEnabled) {
-                                val downloadUrl = Updater.getDownloadUrlForCurrentVariant(releaseInfo, preferredVariant)
+                                val downloadUrl = Updater.getDownloadUrlForCurrentVariant(releaseInfo, preferredVariant, preferredArchitecture)
                                 if (downloadUrl != null) {
                                     val intent = Intent(Intent.ACTION_VIEW, downloadUrl.toUri())
 

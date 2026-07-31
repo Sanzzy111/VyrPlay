@@ -299,10 +299,10 @@ jobs:
           RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
         run: |
           set -euo pipefail
-          mkdir -p app/keystore
-          echo "$DEBUG_KEYSTORE" | base64 -d > app/keystore/debug.keystore
-          echo "$RELEASE_KEYSTORE" | base64 -d > app/keystore/release.keystore
-          ls -la app/keystore/
+          mkdir -p keystore
+          echo "$DEBUG_KEYSTORE" | base64 -d > keystore/debug.keystore
+          echo "$RELEASE_KEYSTORE" | base64 -d > keystore/release.keystore
+          ls -la keystore/
 
       - name: Create local.properties
         run: |
@@ -338,9 +338,14 @@ jobs:
           set -euo pipefail
           sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
 
-          ./gradlew assembleFossMobileUniversalRelease --no-daemon --no-configuration-cache
-          ./gradlew assembleGmsMobileUniversalRelease --no-daemon --no-configuration-cache
-          ./gradlew assembleFossTvUniversalRelease --no-daemon --no-configuration-cache
+          tasks=()
+          for variant in Foss Gms; do
+            for arch in Universal Arm64 Armeabi X86 X86_64; do
+              tasks+=("assemble${variant}Mobile${arch}Release")
+            done
+          done
+          tasks+=(assembleFossTvUniversalRelease)
+          ./gradlew "${tasks[@]}" --no-daemon --no-configuration-cache
 
       - name: Collect and rename APK assets
         env:
@@ -350,19 +355,17 @@ jobs:
           set -euo pipefail
           mkdir -p release-artifacts
 
-          while IFS= read -r apk; do
-            flavor_dir="$(basename "$(dirname "$(dirname "$apk")")")"
-            variant_name="$(echo "$flavor_dir" | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]')"
-
-            case "$variant_name" in
-              *foss*mobile*)   out_name="AuraMusic.apk" ;;
-              *gms*mobile*)    out_name="AuraMusic-with-Google-Cast.apk" ;;
-              *foss*tv*)       out_name="AuraMusic-Tv.apk" ;;
-              *)               out_name="AuraMusic-v${VERSION_NAME}-build${VERSION_CODE}-${variant_name}.apk" ;;
-            esac
-
-            cp "$apk" "release-artifacts/${out_name}"
-          done < <(find app/build/outputs/apk -path '*/release/*.apk' -type f | sort)
+          for variant in foss gms; do
+            for arch in universal arm64 armeabi x86 x86_64; do
+              flavor_dir="${variant}Mobile${arch^}"
+              apk="$(find "app/build/outputs/apk/${flavor_dir}/release" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+              test -n "$apk"
+              cp "$apk" "release-artifacts/AuraMusic-${variant}-${arch}.apk"
+            done
+          done
+          tv_apk="$(find app/build/outputs/apk/fossTvUniversal/release -maxdepth 1 -name '*.apk' -type f | head -n1)"
+          test -n "$tv_apk"
+          cp "$tv_apk" release-artifacts/AuraMusic-tv-universal.apk
 
           ls -la release-artifacts
 

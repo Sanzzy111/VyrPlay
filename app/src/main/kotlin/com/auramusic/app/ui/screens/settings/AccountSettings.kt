@@ -66,6 +66,7 @@ import com.auramusic.app.ui.component.PreferenceEntry
 import com.auramusic.app.ui.component.SwitchPreference
 import com.auramusic.app.ui.component.TextFieldDialog
 import com.auramusic.app.constants.UpdateVariantKey
+import com.auramusic.app.constants.UpdateArchitectureKey
 import com.auramusic.app.utils.Updater
 import com.auramusic.app.utils.rememberPreference
 import com.auramusic.app.viewmodels.AccountSettingsViewModel
@@ -81,6 +82,7 @@ fun AccountSettings(
     val uriHandler = LocalUriHandler.current
     val defaultVariant = if (BuildConfig.CAST_AVAILABLE) "gms" else "foss"
     val (updateVariant, _) = rememberPreference(UpdateVariantKey, defaultVariant)
+    val (updateArchitecture, _) = rememberPreference(UpdateArchitectureKey, "automatic")
 
     val (accountNamePref, onAccountNameChange) = rememberPreference(AccountNameKey, "")
     val (accountEmail, onAccountEmailChange) = rememberPreference(AccountEmailKey, "")
@@ -346,7 +348,7 @@ fun AccountSettings(
 
             if (latestVersionName != BuildConfig.VERSION_NAME) {
                 val releaseInfo = Updater.getCachedLatestRelease()
-                val downloadUrl = releaseInfo?.let { Updater.getDownloadUrlForCurrentVariant(it, updateVariant) }
+                val downloadUrl = releaseInfo?.let { Updater.getDownloadUrlForCurrentVariant(it, updateVariant, updateArchitecture) }
                 
                 if (downloadUrl != null) {
                     PreferenceEntry(

@@ -11,6 +11,21 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: foss, ui: Mobile, arch: universal, task: FossMobileUniversal, output: fossMobileUniversal }
+          - { variant: foss, ui: Mobile, arch: arm64, task: FossMobileArm64, output: fossMobileArm64 }
+          - { variant: foss, ui: Mobile, arch: armeabi, task: FossMobileArmeabi, output: fossMobileArmeabi }
+          - { variant: foss, ui: Mobile, arch: x86, task: FossMobileX86, output: fossMobileX86 }
+          - { variant: foss, ui: Mobile, arch: x86_64, task: FossMobileX86_64, output: fossMobileX86_64 }
+          - { variant: gms, ui: Mobile, arch: universal, task: GmsMobileUniversal, output: gmsMobileUniversal }
+          - { variant: gms, ui: Mobile, arch: arm64, task: GmsMobileArm64, output: gmsMobileArm64 }
+          - { variant: gms, ui: Mobile, arch: armeabi, task: GmsMobileArmeabi, output: gmsMobileArmeabi }
+          - { variant: gms, ui: Mobile, arch: x86, task: GmsMobileX86, output: gmsMobileX86 }
+          - { variant: gms, ui: Mobile, arch: x86_64, task: GmsMobileX86_64, output: gmsMobileX86_64 }
+          - { variant: foss, ui: Tv, arch: universal, task: FossTvUniversal, output: fossTvUniversal }
     permissions:
       contents: read
       id-token: write
@@ -33,15 +48,12 @@ jobs:
           DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
           RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
         run: |
-          mkdir -p app/keystore
-          echo "$DEBUG_KEYSTORE" | base64 -d > app/keystore/debug.keystore
-          echo "$RELEASE_KEYSTORE" | base64 -d > app/keystore/release.keystore
-          ls -la app/keystore/
+          mkdir -p keystore
+          echo "$DEBUG_KEYSTORE" | base64 -d > keystore/debug.keystore
+          echo "$RELEASE_KEYSTORE" | base64 -d > keystore/release.keystore
 
       - name: Create local.properties
         run: |
-          mkdir -p app/keystore
-          cp app/keystore/*.keystore keystore/ 2>/dev/null || true
           cat > local.properties << EOF
           sdk.dir=$ANDROID_HOME
     
@@ -68,34 +80,14 @@ jobs:
           debug.persistent.keyPassword=${{ secrets.DEBUG_KEY_PASSWORD }}
           EOF
 
-      - name: Build Mobile FossUniversalRelease APK
+      - name: Build ${{ matrix.variant }} ${{ matrix.ui }} ${{ matrix.arch }} release APK
         run: |
           sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
-          ./gradlew assembleFossMobileUniversalRelease --no-daemon --no-configuration-cache
+          ./gradlew assemble${{ matrix.task }}Release --no-daemon --no-configuration-cache
 
-      - name: Build Mobile GmsUniversalRelease APK
-        run: |
-          ./gradlew assembleGmsMobileUniversalRelease --no-daemon --no-configuration-cache
-
-      - name: Build TV FossUniversalRelease APK
-        run: |
-          sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
-          ./gradlew assembleFossTvUniversalRelease --no-daemon --no-configuration-cache
-
-      - name: Upload Mobile FOSS APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MobileFossUniversalRelease
-          path: app/build/outputs/apk/fossMobileUniversal/release/*.apk
-
-      - name: Upload Mobile GMS APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MobileGmsUniversalRelease
-          path: app/build/outputs/apk/gmsMobileUniversal/release/*.apk
-
-      - name: Upload TV FOSS APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: TvFossUniversalRelease
-          path: app/build/outputs/apk/fossTvUniversal/release/*.apk
+          name: ${{ matrix.ui }}-${{ matrix.variant }}-${{ matrix.arch }}-release
+          path: app/build/outputs/apk/${{ matrix.output }}/release/*.apk
+          if-no-files-found: error
