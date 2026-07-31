@@ -296,7 +296,7 @@ fun TvPlayerScreen(
 
     // Local alias for concise usage throughout the composable
     val pc = effectivePlayerConnection
-    val activePlayer by (pc?.service?.playerFlow?.collectAsState(initial = pc.player)
+    val activePlayer by (pc?.service?.playerFlow?.collectAsState(initial = null)
         ?: remember { mutableStateOf(null) })
 
     // Focus requesters for TV navigation
@@ -326,8 +326,11 @@ fun TvPlayerScreen(
         val player = activePlayer ?: return@LaunchedEffect
         while (true) {
             delay(250)
-            duration = player.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-            currentPosition = player.currentPosition
+            val playbackPosition = runCatching {
+                (player.duration.takeIf { it != C.TIME_UNSET } ?: 0L) to player.currentPosition
+            }.getOrNull() ?: break
+            duration = playbackPosition.first
+            currentPosition = playbackPosition.second
         }
     }
 
@@ -498,10 +501,13 @@ fun TvPlayerScreen(
                             }
                         }
                     } else {
-                    // Normal mode: album art / lyrics in fixed-size box
+                    // Video fills the available left panel; artwork keeps its thumbnail size.
                     Box(
-                        modifier = Modifier
-                            .size(artworkSize)
+                        modifier = (if (videoModeEnabled) {
+                            Modifier.fillMaxWidth().weight(1f)
+                        } else {
+                            Modifier.size(artworkSize)
+                        })
                             .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center,
@@ -836,6 +842,15 @@ fun TvPlayerScreen(
                             icon = Icons.Filled.Lyrics,
                             contentDescription = if (showLyrics) "Show album artwork" else "Show expanded lyrics",
                             tint = if (showLyrics) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                            size = sideControlSize,
+                        )
+
+                        val isLiked = currentSong?.song?.liked == true
+                        TvPlayerControlButton(
+                            onClick = { pc?.toggleLike() },
+                            painter = painterResource(if (isLiked) R.drawable.favorite else R.drawable.favorite_border),
+                            contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                            tint = if (isLiked) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.7f),
                             size = sideControlSize,
                         )
                     }

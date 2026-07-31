@@ -381,7 +381,10 @@ object LyricsUtils {
             val fractionPart = if (match.groupValues[3].length == 3) fraction / 1000.0 else fraction / 100.0
             val startTimeSeconds = minutes * 60.0 + seconds + fractionPart
             
-            val wordText = match.groupValues[4].trim()
+            // Keep trailing whitespace: RichSync stores the separator before the next
+            // timestamp at the end of the current token ("Living <time>lawless").
+            // Trimming both ends concatenates every word in the karaoke renderer.
+            val wordText = match.groupValues[4].trimStart()
             
             // Calculate end time: use next word's start time, or estimate from next line
             val endTimeSeconds = if (index < wordMatches.size - 1) {

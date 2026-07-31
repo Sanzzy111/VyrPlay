@@ -42,6 +42,7 @@ import com.auramusic.app.utils.SyncUtils
 import com.auramusic.app.utils.rememberEnumPreference
 import com.auramusic.app.utils.rememberPreference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -72,7 +73,12 @@ class TvMainActivity : ComponentActivity() {
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as? MusicBinder ?: return
+            val binder = service as? MusicBinder
+            if (binder == null) {
+                Timber.tag("TvMainActivity").e("Music service returned an invalid binder")
+                rebindMusicService()
+                return
+            }
             try {
                 disposePlayerConnection()
                 val connection = PlayerConnection(
@@ -86,12 +92,25 @@ class TvMainActivity : ComponentActivity() {
                 Timber.tag("TvMainActivity").d("PlayerConnection created successfully")
             } catch (e: Exception) {
                 Timber.tag("TvMainActivity").e(e, "Failed to create PlayerConnection")
+                rebindMusicService()
             }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             Timber.tag("TvMainActivity").w("Music service disconnected")
             disposePlayerConnection()
+        }
+
+        override fun onBindingDied(name: ComponentName?) {
+            Timber.tag("TvMainActivity").w("Music service binding died; reconnecting")
+            disposePlayerConnection()
+            rebindMusicService()
+        }
+
+        override fun onNullBinding(name: ComponentName?) {
+            Timber.tag("TvMainActivity").e("Music service returned a null binding; reconnecting")
+            disposePlayerConnection()
+            rebindMusicService()
         }
     }
 
@@ -143,13 +162,7 @@ class TvMainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (!serviceBound) {
-            serviceBound = bindService(
-                Intent(this, MusicService::class.java),
-                serviceConnection,
-                BIND_AUTO_CREATE,
-            )
-        }
+        bindMusicService()
     }
 
     override fun onStop() {
@@ -160,6 +173,27 @@ class TvMainActivity : ComponentActivity() {
         listenTogetherManager.setPlayerConnection(null)
         playerConnectionFlow.value?.dispose()
         playerConnectionFlow.value = null
+    }
+
+    private fun bindMusicService() {
+        if (!serviceBound && !isFinishing && !isDestroyed) {
+            serviceBound = bindService(
+                Intent(this, MusicService::class.java),
+                serviceConnection,
+                BIND_AUTO_CREATE,
+            )
+        }
+    }
+
+    private fun rebindMusicService() {
+        if (serviceBound) {
+            runCatching { unbindService(serviceConnection) }
+            serviceBound = false
+        }
+        lifecycleScope.launch {
+            delay(250)
+            bindMusicService()
+        }
     }
 
     override fun onDestroy() {
