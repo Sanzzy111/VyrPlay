@@ -1,5 +1,13 @@
 # AuraMusic v3.0.0 (Build 27) Release Notes
 
+# AuraMusic v3.0.0 (Build 27) Release Notes
+
+## What's New
+
+**Full Changelog**: https://github.com/TeamAuraMusic/AuraMusic/compare/...424c5395ab2a6bea6178f9d77452b946c4bfef69
+
+# AuraMusic v3.0.0 (Build 27) Release Notes
+
 > [!NOTE]
 > AuraMusic 3.0 is a major playback, lyrics, Android TV, recommendation, account, updater, and release-distribution update. It adds two lyrics providers, brings AutoMix to streamed music, significantly expands the TV experience, and introduces APKs tailored to each supported installation type.
 

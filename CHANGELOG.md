@@ -1,5 +1,13 @@
 # AuraMusic v3.0.0 (Build 27) Changelog
 
+# AuraMusic v3.0.0 (Build 27) Release Notes
+
+## What's New
+
+**Full Changelog**: https://github.com/TeamAuraMusic/AuraMusic/compare/...424c5395ab2a6bea6178f9d77452b946c4bfef69
+
+# AuraMusic v3.0.0 (Build 27) Changelog
+
 > [!NOTE]
 > This changelog covers all 38 commits from `03d919e` through `e446e6a`, inclusive. No commits in the requested range are omitted.
 
