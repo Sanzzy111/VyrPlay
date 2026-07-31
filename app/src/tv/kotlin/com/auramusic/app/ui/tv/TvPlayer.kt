@@ -265,8 +265,9 @@ fun TvPlayerScreen(
         com.auramusic.app.constants.ShowLyricsKey,
         false,
     )
-    // Lyrics expand/collapse state for TV
-    var lyricsExpanded by remember { mutableStateOf(false) }
+    // On TV, enabling lyrics always means expanded mode. The preference survives
+    // navigation, so returning to the player restores the same expanded view.
+    val lyricsExpanded = showLyrics
 
     // Resolve player connection: prefer passed-in parameter, fall back to composition local.
     // We avoid early return to show loading UI when service not ready.
@@ -334,10 +335,6 @@ fun TvPlayerScreen(
     // playback that starts before the song row is present in the local DB still
     // has player artwork, lyrics and video state.
     val mediaMetadata = currentSong?.toMediaMetadata() ?: currentMediaMetadata
-
-    LaunchedEffect(showLyrics) {
-        if (!showLyrics) lyricsExpanded = false
-    }
 
     LaunchedEffect(mediaMetadata?.id, mediaMetadata?.isVideoSong, videoModeToggleEnabled) {
         val videoId = mediaMetadata?.id ?: return@LaunchedEffect
@@ -834,13 +831,7 @@ fun TvPlayerScreen(
 
                         TvPlayerControlButton(
                             onClick = {
-                                if (showLyrics) {
-                                    onShowLyricsChange(false)
-                                    lyricsExpanded = false
-                                } else {
-                                    onShowLyricsChange(true)
-                                    lyricsExpanded = true
-                                }
+                                onShowLyricsChange(!showLyrics)
                             },
                             icon = Icons.Filled.Lyrics,
                             contentDescription = if (showLyrics) "Show album artwork" else "Show expanded lyrics",

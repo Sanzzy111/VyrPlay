@@ -218,6 +218,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -625,6 +626,15 @@ class MusicService :
         // Mark player as initialized after successful creation
         playerInitialized.value = true
         Timber.tag(TAG).d("Player successfully initialized")
+
+        // AutoMix must be consumed by the service rather than a particular UI.
+        // This keeps TV and background playback queues populated as soon as
+        // candidates arrive, and timeline changes then update every queue UI.
+        scope.launch {
+            automixItems.collect {
+                enqueueNextAutomixItemIfNeeded()
+            }
+        }
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         setupAudioFocusRequest()
@@ -1794,6 +1804,20 @@ class MusicService :
         automixItems.value = emptyList()
     }
 
+    private fun enqueueNextAutomixItemIfNeeded() {
+        if (automixItems.value.isEmpty() || player.mediaItemCount == 0) return
+        if (player.repeatMode != REPEAT_MODE_OFF || player.currentTimeline.isEmpty) return
+
+        val nextIndex = player.currentTimeline.getNextWindowIndex(
+            player.currentMediaItemIndex,
+            REPEAT_MODE_OFF,
+            player.shuffleModeEnabled,
+        )
+        if (nextIndex == C.INDEX_UNSET) {
+            addToQueueAutomix(automixItems.value.first(), 0)
+        }
+    }
+
     fun playNext(items: List<MediaItem>) {
         // If queue is empty or player is idle, play immediately instead
         if (player.mediaItemCount == 0 || player.playbackState == STATE_IDLE) {
@@ -2053,6 +2077,7 @@ class MusicService :
         // against the previous item while the next item's audio is already
         // playing, which shows a black video surface.
         currentMediaMetadata.value = mediaItem?.metadata
+        enqueueNextAutomixItemIfNeeded()
 
         // Load SponsorBlock for audio-only playback here. In video mode the
         // actual YouTube video id is resolved later by setVideoMode(), so using

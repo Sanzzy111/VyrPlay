@@ -196,7 +196,12 @@ object Musixmatch {
     internal fun convertRichSyncToLrc(lines: List<RichSyncLine>): String = lines.joinToString("\n") { line ->
         buildString {
             append(timestamp(line.ts, '[', ']'))
-            if (line.l.isNotEmpty()) line.l.forEach { part -> append(timestamp(line.ts + part.o, '<', '>')).append(part.c) }
+            if (line.l.isNotEmpty()) line.l.forEach { part ->
+                // Musixmatch emits spaces as separate RichSync parts. Timestamping those
+                // whitespace-only parts makes enhanced-LRC parsers collapse the words.
+                if (part.c.isBlank()) append(part.c)
+                else append(timestamp(line.ts + part.o, '<', '>')).append(part.c)
+            }
             else append(line.x.orEmpty())
         }
     }
