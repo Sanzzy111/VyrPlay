@@ -14,7 +14,8 @@
     <string name="search">Suche</string>
     <string name="together">Hören Sie auf</string>
     <plurals name="n_selected">
-        <item quantity="other">%d ausgewählt</item>
+        <item quantity="one">%d ausgewählt</item>
+        <item quantity="other">%d ausgewählte</item>
     </plurals>
     <string name="history">Geschichte</string>
     <string name="progress_percent">%s%%</string>
@@ -220,7 +221,7 @@
     </plurals>
     <plurals name="n_artist">
         <item quantity="one">%d Künstler</item>
-        <item quantity="other">%d Künstler</item>
+        <item quantity="other">%d Die Künstler</item>
     </plurals>
     <plurals name="n_album">
         <item quantity="one">%d Album</item>
@@ -282,13 +283,13 @@
     <string name="widget_music_player">Musik-Spieler</string>
     <string name="widget_song_title">Songtitel</string>
     <string name="widget_artist_name">Künstlername</string>
-    <string name="widget_album_art">Album:</string>
+    <string name="widget_album_art">Album-Cover</string>
     <string name="widget_play_pause">Spielen/Pause</string>
     <string name="widget_like_button">Wie</string>
     <string name="widget_progress_fill">Fortschritte</string>
     <string name="widget_play_pause_container">Spielen/Pause</string>
     <string name="widget_compact_square">Kompakter Platz</string>
-    <string name="widget_compact_album_art">Album:</string>
+    <string name="widget_compact_album_art">Album-Cover</string>
     <string name="widget_compact_play_pause">Spielen/Pause</string>
     <string name="widget_compact_play_container">Spielen</string>
     <string name="widget_compact_wide">Kompaktes breites</string>
@@ -304,13 +305,13 @@
     <string name="settings">Einstellungen</string>
     <string name="appearance">Erscheinung</string>
     <string name="fonts">Schriften</string>
-    <string name="font_selection">Schriftart</string>
-    <string name="app_font">App Font</string>
-    <string name="default_font">System Default</string>
-    <string name="theme">Thema</string>
-    <string name="theme_desc">Passen Sie Ihre App Thema</string>
-    <string name="theme_colors">Thema und Farben</string>
-    <string name="theme_mode">Thema</string>
+    <string name="font_selection">Schriftart Auswahl</string>
+    <string name="app_font">Anwendungsschrift</string>
+    <string name="default_font">System-Standard</string>
+    <string name="theme">Design</string>
+    <string name="theme_desc">Anwendungsdesign anpassen</string>
+    <string name="theme_colors">Design &amp; Farben</string>
+    <string name="theme_mode">Design Modus</string>
     <string name="color_palette">Farbpalette</string>
     <string name="use_system_colors">Systemfarben verwenden</string>
     <string name="enable_dynamic_theme">Dynamisches Thema aktivieren</string>
@@ -749,7 +750,7 @@
     <string name="wrapped_ready_title">Ihr %s Wrapped ist fertig!</string>
     <string name="wrapped_ready_subtitle">Sehen Sie Ihren Monat in der Musik</string>
     <string name="open">Öffnen</string>
-    <string name="wrapped_year">(X0X)</string>
+    <string name="wrapped_year">%s</string>
     <string name="wrapped_intro_title">Ihr Monat in der Musik</string>
     <string name="wrapped_intro_subtitle">Entdecken Sie Ihre Top-Songs, Künstler und mehr</string>
     <string name="wrapped_intro_button">Siehe meine %s</string>
@@ -954,4 +955,5 @@
     <string name="new_release_notification_title_single">Neue Veröffentlichung eines abonnierten Künstlers</string>
     <string name="new_release_notification_title_multiple">%d neue Releases von abonnierten Künstlern</string>
     <string name="new_release_notifications">Neue Release-Benachrichtigungen</string>
+    <string name="resume_playback">Wiedergabe fortsetzen</string>
 </resources>
