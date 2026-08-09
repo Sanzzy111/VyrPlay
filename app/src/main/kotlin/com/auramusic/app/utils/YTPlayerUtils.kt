@@ -12,6 +12,7 @@ import com.auramusic.innertube.NewPipeExtractor
 import com.auramusic.innertube.PoTokenProvider
 import com.auramusic.innertube.YouTube
 import com.auramusic.innertube.models.YouTubeClient
+import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
 import com.auramusic.innertube.models.YouTubeClient.Companion.IPADOS
 import com.auramusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
@@ -33,6 +34,7 @@ object YTPlayerUtils {
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
 
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        ANDROID,
         ANDROID_VR_NO_AUTH,
         IPADOS,
     )

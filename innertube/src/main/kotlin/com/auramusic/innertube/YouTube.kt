@@ -1062,13 +1062,14 @@ object YouTube {
         client: YouTubeClient,
         signatureTimestamp: Int? = null,
         poToken: String? = null,
+        setLogin: Boolean = true,
     ): Result<PlayerResponse> = runCatching {
         try {
-            innerTube.player(client, videoId, playlistId, signatureTimestamp, poToken).body<PlayerResponse>()
+            innerTube.player(client, videoId, playlistId, signatureTimestamp, poToken, setLogin).body<PlayerResponse>()
         } catch (e: Exception) {
             if (client.loginRequired || client.loginSupported) {
                 timber.log.Timber.w("player: WEB client failed with LOGIN_REQUIRED, falling back to ANDROID")
-                innerTube.player(MOBILE, videoId, playlistId, signatureTimestamp, poToken).body<PlayerResponse>()
+                innerTube.player(MOBILE, videoId, playlistId, signatureTimestamp, poToken, setLogin).body<PlayerResponse>()
             } else {
                 throw e
             }

@@ -16,6 +16,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.ActivityManager
 import android.database.SQLException
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -23,6 +24,7 @@ import android.media.audiofx.AudioEffect
 import android.media.audiofx.LoudnessEnhancer
 import android.net.ConnectivityManager
 import android.os.Binder
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
@@ -76,9 +78,11 @@ import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaController
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionToken
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.MoreExecutors
 import com.auramusic.innertube.YouTube
 import com.auramusic.innertube.models.SongItem
@@ -289,6 +293,62 @@ class MusicService :
 
     @Inject
     lateinit var poTokenProvider: PoTokenProvider
+
+    /**
+     * Wraps [DefaultMediaNotificationProvider] so the asynchronous artwork-load
+     * callback (which Media3 1.7.1 routes straight into
+     * [androidx.media3.session.MediaNotificationManager.onNotificationChanged]
+     * -> startForeground without a try/catch) cannot fire while the app is in
+     * the background. On Android 12+ that path throws
+     * [android.app.ForegroundServiceStartNotAllowedException] and crashes the
+     * process. The official fix only landed in Media3 1.11.0, so we gate it
+     * ourselves: notification artwork updates are deferred until the app is
+     * foregrounded again, where the next notification refresh applies them.
+     */
+    private class ForegroundSafeMediaNotificationProvider(
+        private val context: Context,
+        private val delegate: DefaultMediaNotificationProvider,
+    ) : MediaNotification.Provider {
+
+        override fun createNotification(
+            mediaSession: MediaSession,
+            mediaButtonPreferences: ImmutableList<CommandButton>,
+            actionFactory: MediaNotification.ActionFactory,
+            callback: MediaNotification.Provider.Callback,
+        ): MediaNotification {
+            val foregroundSafeCallback = object : MediaNotification.Provider.Callback {
+                override fun onNotificationChanged(notification: MediaNotification) {
+                    if (isAppInForeground()) {
+                        callback.onNotificationChanged(notification)
+                    }
+                }
+            }
+            return delegate.createNotification(
+                mediaSession,
+                mediaButtonPreferences,
+                actionFactory,
+                foregroundSafeCallback,
+            )
+        }
+
+        override fun handleCustomCommand(
+            mediaSession: MediaSession,
+            action: String,
+            extras: Bundle,
+        ): Boolean = delegate.handleCustomCommand(mediaSession, action, extras)
+
+        private fun isAppInForeground(): Boolean {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                ?: return true
+            return try {
+                val state = ActivityManager.RunningAppProcessInfo()
+                ActivityManager.getMyMemoryState(state)
+                state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            } catch (e: Exception) {
+                true
+            }
+        }
+    }
 
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -581,15 +641,18 @@ class MusicService :
         }
 
         setMediaNotificationProvider(
-            DefaultMediaNotificationProvider(
-                this,
-                { NOTIFICATION_ID },
-                if (isTv) TV_CHANNEL_ID else CHANNEL_ID,
-                R.string.music_player
-            )
-                .apply {
-                    setSmallIcon(R.drawable.ic_notification_icon)
-                },
+            ForegroundSafeMediaNotificationProvider(
+                context = this,
+                delegate = DefaultMediaNotificationProvider(
+                    this,
+                    { NOTIFICATION_ID },
+                    if (isTv) TV_CHANNEL_ID else CHANNEL_ID,
+                    R.string.music_player
+                )
+                    .apply {
+                        setSmallIcon(R.drawable.ic_notification_icon)
+                    },
+            ),
         )
         player = createExoPlayer()
         player.addListener(this@MusicService)
