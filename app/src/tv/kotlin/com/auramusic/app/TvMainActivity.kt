@@ -7,10 +7,13 @@ package com.auramusic.app
 
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
+import android.util.DisplayMetrics
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -58,6 +61,43 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class TvMainActivity : ComponentActivity() {
+
+    /**
+     * Design reference width (in dp) for the TV UI.
+     *
+     * TV devices report wildly different densities: Google TV hardware
+     * (Chromecast with Google TV, Google TV Streamer, Google TV sets) reports
+     * xhdpi (320dpi -> 960dp at 1080p) per the Android TV MDPI design
+     * reference, while many Android TV boxes under-report density (160-213dpi
+     * -> 1443-1920dp at 1080p). The same physical TV therefore yields a very
+     * different dp viewport, so the layout (which was tuned on the wider
+     * Android-TV dp sizes) comes out cramped and inconsistent on Google TV.
+     *
+     * We normalise density so every TV renders at the same reference width
+     * (1920dp at 1080p), making Google TV and Android TV render identically.
+     */
+    private companion object {
+        const val TV_REFERENCE_WIDTH_DP = 1920
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        val configuration = Configuration(newBase.resources.configuration)
+        try {
+            val widthPx = newBase.resources.displayMetrics.widthPixels
+            if (widthPx > 0) {
+                val targetDensityDpi =
+                    (widthPx * DisplayMetrics.DENSITY_DEFAULT.toFloat() / TV_REFERENCE_WIDTH_DP).toInt()
+                        .coerceIn(DisplayMetrics.DENSITY_LOW, 640)
+                if (targetDensityDpi != configuration.densityDpi) {
+                    configuration.densityDpi = targetDensityDpi
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("TvMainActivity").w(e, "Failed to normalise TV display density")
+        }
+        super.attachBaseContext(newBase)
+        applyOverrideConfiguration(configuration)
+    }
 
     @Inject
     lateinit var database: MusicDatabase
