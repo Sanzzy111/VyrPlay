@@ -302,13 +302,17 @@ class MusicService :
      * the background. On Android 12+ that path throws
      * [android.app.ForegroundServiceStartNotAllowedException] and crashes the
      * process. The official fix only landed in Media3 1.11.0, so we gate it
-     * ourselves: notification artwork updates are deferred until the app is
-     * foregrounded again, where the next notification refresh applies them.
+     * ourselves: notification artwork updates are deferred while the app is
+     * backgrounded and flushed (foreground-safe) on the next notification
+     * refresh, so no update is ever lost.
      */
     private class ForegroundSafeMediaNotificationProvider(
         private val context: Context,
         private val delegate: DefaultMediaNotificationProvider,
     ) : MediaNotification.Provider {
+
+        @Volatile
+        private var pendingNotification: MediaNotification? = null
 
         override fun createNotification(
             mediaSession: MediaSession,
@@ -316,10 +320,14 @@ class MusicService :
             actionFactory: MediaNotification.ActionFactory,
             callback: MediaNotification.Provider.Callback,
         ): MediaNotification {
+            flushPendingNotification(callback)
             val foregroundSafeCallback = object : MediaNotification.Provider.Callback {
                 override fun onNotificationChanged(notification: MediaNotification) {
                     if (isAppInForeground()) {
+                        pendingNotification = null
                         callback.onNotificationChanged(notification)
+                    } else {
+                        pendingNotification = notification
                     }
                 }
             }
@@ -336,6 +344,14 @@ class MusicService :
             action: String,
             extras: Bundle,
         ): Boolean = delegate.handleCustomCommand(mediaSession, action, extras)
+
+        private fun flushPendingNotification(callback: MediaNotification.Provider.Callback) {
+            val pending = pendingNotification ?: return
+            if (isAppInForeground()) {
+                pendingNotification = null
+                callback.onNotificationChanged(pending)
+            }
+        }
 
         private fun isAppInForeground(): Boolean {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
@@ -1438,13 +1454,19 @@ class MusicService :
         val nextWindowIndex = player.nextMediaItemIndex
 
         if (consecutivePlaybackErr <= MAX_CONSECUTIVE_ERR && nextWindowIndex != C.INDEX_UNSET) {
-            player.seekTo(nextWindowIndex, C.TIME_UNSET)
-            player.prepare()
-            // Don't start local playback if casting
-            if (castConnectionHandler?.isCasting?.value != true) {
-                player.play()
+            try {
+                // The timeline may have changed (e.g. video-mode source replacement) between
+                // reading nextMediaItemIndex and seeking, which throws IllegalSeekPositionException.
+                player.seekTo(nextWindowIndex, C.TIME_UNSET)
+                player.prepare()
+                // Don't start local playback if casting
+                if (castConnectionHandler?.isCasting?.value != true) {
+                    player.play()
+                }
+                return
+            } catch (e: Exception) {
+                Timber.e(e, "skipOnError: Failed to skip to next item")
             }
-            return
         }
 
         player.pause()
@@ -2146,7 +2168,7 @@ class MusicService :
         // against the previous item while the next item's audio is already
         // playing, which shows a black video surface.
         currentMediaMetadata.value = mediaItem?.metadata
-        enqueueNextAutomixItemIfNeeded()
+        runCatching { enqueueNextAutomixItemIfNeeded() }
 
         // Load SponsorBlock for audio-only playback here. In video mode the
         // actual YouTube video id is resolved later by setVideoMode(), so using
@@ -2154,16 +2176,26 @@ class MusicService :
         if (sponsorBlockManager.enabled.value && !isVideoMode && !_isVideoSwitching.value && mediaItem?.mediaId != null) {
             val mediaId = mediaItem.mediaId
             scope.launch {
-                sponsorBlockManager.loadSegments(mediaId, currentPlaybackDurationMs())
+                try {
+                    sponsorBlockManager.loadSegments(mediaId, currentPlaybackDurationMs())
+                } catch (e: Exception) {
+                    Timber.e(e, "onMediaItemTransition: SponsorBlock load failed")
+                }
             }
         }
 
-        val currentMediaId = currentMediaMetadata.value?.id
         val newMediaId = mediaItem?.mediaId
-        
-        val isNewSong = currentMediaId != null && newMediaId != null && currentMediaId != newMediaId
-        
-        if (isNewSong || !_isVideoSwitching.value) {
+
+        // currentMediaMetadata was just overwritten with the incoming item's metadata,
+        // whose .id is never set by our MediaItem builders — so comparing it against
+        // mediaId can never detect a change. Compare against the previously-seen
+        // mediaId instead. Transitions fired by our own video-mode source replacement
+        // carry the SAME mediaId and are ignored, breaking the infinite re-fetch loop
+        // that showed a black video surface on the next song and eventually crashed.
+        val isNewSong = newMediaId != null && newMediaId != lastTransitionMediaId
+        lastTransitionMediaId = newMediaId
+
+        if (isNewSong) {
             // If we were in video mode, just clear the source tracking without
             // resetting the full video state — this avoids the black screen gap
             // where video surface has no content while we re-fetch for the new song.
@@ -2200,6 +2232,9 @@ class MusicService :
                             if (currentVideoSourceMediaId != newMediaId) {
                                 Timber.d("onMediaItemTransition: Re-enabling video mode for next video song: $newMediaId")
                                 setVideoMode(true)
+                            } else {
+                                // Video already resolved for this song — nothing to refetch.
+                                _isVideoSwitching.value = false
                             }
                         } else if (isVideoSong) {
                             // Not yet in video mode, check availability first
@@ -2210,8 +2245,11 @@ class MusicService :
                                 setVideoMode(true)
                             }
                         } else if (isVideoMode) {
-                            // New song is NOT a video — switch back to audio
-                            switchToAudioMode()
+                            // New song is NOT a video. On a genuine song transition the queue
+                            // item is already the audio version, so there is nothing to restore
+                            // — just drop the stale video-mode state. (switchToAudioMode would
+                            // wrongly re-inject the PREVIOUS song's audio item here.)
+                            resetVideoMode()
                         }
                     } catch (e: Exception) {
                         Timber.e(e, "onMediaItemTransition: Error auto-enabling video mode")
@@ -3081,7 +3119,15 @@ class MusicService :
 
                 // Reset silence tracking before seeking to prevent immediate re-trigger
                 silenceProcessor.resetTracking()
-                player.seekTo(target)
+                try {
+                    // seekTo can throw if the timeline changed concurrently (video-mode
+                    // source replacement or auto-advance). Swallow it so a race on the
+                    // next song's start never kills the app.
+                    player.seekTo(target)
+                } catch (e: Exception) {
+                    Timber.e(e, "performInstantSilenceSkip: seekTo failed")
+                    break
+                }
                 hops++
 
                 if (hops >= 80 || target >= duration - 500) break
@@ -3609,6 +3655,11 @@ class MusicService :
     private var currentVideoSourceMediaId: String? = null
     private var originalAudioMediaItem: MediaItem? = null
     private var videoSwitchJob: Job? = null
+    // Tracks the last mediaId reported by onMediaItemTransition. Used to detect a
+    // REAL song change: replacing the current item with its video version (or the
+    // merged source swap) fires a transition with the SAME mediaId, which must not
+    // be treated as a new song (that caused an infinite video re-fetch loop).
+    private var lastTransitionMediaId: String? = null
     private val _videoModeEnabled = MutableStateFlow(false)
     val videoModeEnabled: StateFlow<Boolean> = _videoModeEnabled.asStateFlow()
     private val _isVideoSwitching = MutableStateFlow(false)

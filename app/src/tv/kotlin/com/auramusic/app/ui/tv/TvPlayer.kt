@@ -342,6 +342,12 @@ fun TvPlayerScreen(
     LaunchedEffect(mediaMetadata?.id, mediaMetadata?.isVideoSong, videoModeToggleEnabled) {
         val videoId = mediaMetadata?.id ?: return@LaunchedEffect
         val playerConnection = pc ?: return@LaunchedEffect
+
+        // Returning to the player screen: if video mode is already active and a video
+        // has been resolved for this song, there is nothing to do. Skip the availability
+        // network call and any mode toggle so the video isn't re-fetched on re-entry.
+        if (videoModeEnabled && playerConnection.currentVideoId.value != null) return@LaunchedEffect
+
         val available = playerConnection.service.checkVideoAvailability(videoId)
 
         // Staleness check: song may have changed during network call

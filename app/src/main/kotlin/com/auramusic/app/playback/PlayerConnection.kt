@@ -543,7 +543,10 @@ import timber.log.Timber
     }
 
     private fun updateCanSkipPreviousAndNext() {
-        if (!player.currentTimeline.isEmpty) {
+        // During video-mode source replacement the timeline can be momentarily
+        // non-empty while currentMediaItemIndex is still -1; getWindow(-1) then
+        // throws IndexOutOfBoundsException on the main thread (process death).
+        if (!player.currentTimeline.isEmpty && player.currentMediaItemIndex >= 0) {
             val window =
                 player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
             canSkipPrevious.value = player.isCommandAvailable(COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) ||

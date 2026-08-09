@@ -6,6 +6,7 @@
 package com.auramusic.app.ui.tv
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -1006,61 +1007,72 @@ fun TvFocusedDetailPanel(
         label = "detailAlpha",
     )
 
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(360.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Color.Transparent,
-        tonalElevation = 0.dp,
+            .height(440.dp),
     ) {
-        if (focusedItem != null) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = focusedItem.thumbnailUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = 0.45f
-                            scaleX = 1.05f
-                            scaleY = 1.05f
-                        },
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.75f),
-                                    Color.Black.copy(alpha = 0.50f),
-                                    Color.Black.copy(alpha = 0.20f),
+        Crossfade(
+            targetState = focusedItem,
+            animationSpec = tween(450),
+            label = "focusedDetailPanel",
+        ) { item ->
+            if (item != null) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Full-bleed artwork backdrop, rendered at the back of the panel
+                    // (maxstream TV-details style).
+                    AsyncImage(
+                        model = item.thumbnailUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Horizontal scrim: solid on the left for text legibility, fully
+                    // transparent on the right so the artwork stays visible.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.background,
+                                        MaterialTheme.colorScheme.background.copy(alpha = 0.87f),
+                                        Color.Transparent,
+                                    ),
                                 )
                             )
-                        )
-                )
+                    )
+                    // Vertical scrim: transparent on top, solid at the bottom so the
+                    // artwork melts into the content rows below.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        MaterialTheme.colorScheme.background.copy(alpha = 0.20f),
+                                        MaterialTheme.colorScheme.background,
+                                    ),
+                                )
+                            )
+                    )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 28.dp, end = 28.dp, top = 95.dp, bottom = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                    // Foreground content pinned bottom-left, like the maxstream hero.
                     Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .graphicsLayer { alpha = animatedAlpha },
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = animatedAlpha }
+                            .padding(start = 54.dp, end = 48.dp, bottom = 40.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                         ) {
                             Text(
-                                text = focusedItem.type.ifBlank { "Music" },
+                                text = item.type.ifBlank { "Music" },
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -1069,7 +1081,7 @@ fun TvFocusedDetailPanel(
                         }
 
                         Text(
-                            text = focusedItem.title,
+                            text = item.title,
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -1077,9 +1089,9 @@ fun TvFocusedDetailPanel(
                             overflow = TextOverflow.Ellipsis,
                         )
 
-                        if (focusedItem.subtitle.isNotBlank()) {
+                        if (item.subtitle.isNotBlank()) {
                             Text(
-                                text = focusedItem.subtitle,
+                                text = item.subtitle,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color.White.copy(alpha = 0.8f),
                                 maxLines = 1,
@@ -1088,8 +1100,8 @@ fun TvFocusedDetailPanel(
                         }
 
                         val stats = listOfNotNull(
-                            focusedItem.monthlyListenerCount?.takeIf { it.isNotBlank() },
-                            focusedItem.subscriberCountText?.takeIf { it.isNotBlank() },
+                            item.monthlyListenerCount?.takeIf { it.isNotBlank() },
+                            item.subscriberCountText?.takeIf { it.isNotBlank() },
                         )
                         if (stats.isNotEmpty()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1110,68 +1122,48 @@ fun TvFocusedDetailPanel(
                             }
                         }
 
-                        if (focusedItem.description.isNotBlank()) {
+                        if (item.description.isNotBlank()) {
                             Text(
-                                text = focusedItem.description,
+                                text = item.description,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.75f),
-                                maxLines = if (focusedItem.type == "Artist") 3 else 2,
+                                maxLines = if (item.type == "Artist") 3 else 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .size(200.dp)
-                            .clip(if (focusedItem.type == "Artist") CircleShape else RoundedCornerShape(20.dp))
-                            .background(Color.Black.copy(alpha = 0.3f))
-                            .border(
-                                width = 2.dp,
-                                color = Color.White.copy(alpha = 0.3f),
-                                shape = if (focusedItem.type == "Artist") CircleShape else RoundedCornerShape(20.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
+                }
+            } else {
+                // Default state when nothing is focused
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        AsyncImage(
-                            model = focusedItem.thumbnailUrl,
-                            contentDescription = focusedItem.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
+                        Icon(
+                            painterResource(R.drawable.ic_launcher_foreground),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                            modifier = Modifier.size(48.dp),
+                        )
+                        Text(
+                            text = "Browse your music",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                         )
                     }
-                }
-            }
-        } else {
-            // Default state when nothing is focused
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.surfaceVariant,
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                        modifier = Modifier.size(48.dp),
-                    )
-                    Text(
-                        text = "Browse your music",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    )
                 }
             }
         }
