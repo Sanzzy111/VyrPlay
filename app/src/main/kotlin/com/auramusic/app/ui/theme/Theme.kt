@@ -20,7 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
@@ -35,6 +37,7 @@ fun AuraMusicTheme(
     pureBlack: Boolean = false,
     themeColor: Color = DefaultThemeColor,
     selectedFont: String = "OUTFIT",
+    fontScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -71,7 +74,9 @@ fun AuraMusicTheme(
         "POPPINS", "ROBOTO", "INTER", "OUTFIT" -> Outfit
         else -> Outfit
     }
-    val typography = remember(fontFamily) { AppTypography.withFontFamily(fontFamily) }
+    val typography = remember(fontFamily, fontScale) {
+        AppTypography.withFontFamily(fontFamily).scaledBy(fontScale)
+    }
 
     // Use standard MaterialTheme instead of MaterialExpressiveTheme
     MaterialTheme(
@@ -135,3 +140,33 @@ private fun androidx.compose.material3.Typography.withFontFamily(fontFamily: Fon
     labelMedium = labelMedium.copy(fontFamily = fontFamily),
     labelSmall = labelSmall.copy(fontFamily = fontFamily)
 )
+
+private fun androidx.compose.material3.Typography.scaledBy(scale: Float) =
+    if (scale <= 0f || scale == 1f) {
+        this
+    } else {
+        copy(
+            displayLarge = displayLarge.scaledBy(scale),
+            displayMedium = displayMedium.scaledBy(scale),
+            displaySmall = displaySmall.scaledBy(scale),
+            headlineLarge = headlineLarge.scaledBy(scale),
+            headlineMedium = headlineMedium.scaledBy(scale),
+            headlineSmall = headlineSmall.scaledBy(scale),
+            titleLarge = titleLarge.scaledBy(scale),
+            titleMedium = titleMedium.scaledBy(scale),
+            titleSmall = titleSmall.scaledBy(scale),
+            bodyLarge = bodyLarge.scaledBy(scale),
+            bodyMedium = bodyMedium.scaledBy(scale),
+            bodySmall = bodySmall.scaledBy(scale),
+            labelLarge = labelLarge.scaledBy(scale),
+            labelMedium = labelMedium.scaledBy(scale),
+            labelSmall = labelSmall.scaledBy(scale)
+        )
+    }
+
+private fun TextStyle.scaledBy(scale: Float) =
+    copy(
+        fontSize = (fontSize.value * scale.coerceIn(0.5f, 3f)).sp,
+        lineHeight = (lineHeight.value * scale.coerceIn(0.5f, 3f)).sp,
+        letterSpacing = (letterSpacing.value * scale.coerceIn(0.5f, 3f)).sp,
+    )

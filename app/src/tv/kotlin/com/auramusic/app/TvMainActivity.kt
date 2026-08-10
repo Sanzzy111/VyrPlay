@@ -187,6 +187,7 @@ class TvMainActivity : ComponentActivity() {
                   pureBlack = pureBlack,
                   themeColor = themeColor,
                   selectedFont = selectedFont,
+                  fontScale = 1.15f,
               ) {
                   CompositionLocalProvider(
                       LocalDatabase provides database,

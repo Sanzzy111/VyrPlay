@@ -210,6 +210,7 @@ import com.auramusic.app.widget.MusicWidgetReceiver
 import com.auramusic.app.widget.CompactSquareWidgetReceiver
 import com.auramusic.app.widget.CompactWideWidgetReceiver
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -237,6 +238,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import timber.log.Timber
 import java.io.File
 import java.io.ObjectInputStream
@@ -695,10 +698,19 @@ class MusicService :
         // SponsorBlock periodic skip check
         scope.launch {
             while (true) {
-                if (sponsorBlockManager.enabled.value && player.isPlaying) {
+                // Same behaviour as always: when inside a segment, seek to its end.
+                // The only difference is we don't seek while a video-mode switch or
+                // an automix crossfade is mid-flight: seeking there races the media-item
+                // replacement/swap and can crash or stall the next song on TV. The next
+                // 250ms tick re-checks, so the segment is still skipped right after the
+                // switch completes.
+                if (sponsorBlockManager.enabled.value && player.isPlaying &&
+                    !_isVideoSwitching.value && !isCrossfading && secondaryPlayer == null
+                ) {
                     val skipTo = sponsorBlockManager.findSkipTarget(player.currentPosition)
-                    if (skipTo != null) {
-                        player.seekTo(skipTo)
+                    if (skipTo != null && skipTo > player.currentPosition) {
+                        runCatching { player.seekTo(skipTo) }
+                            .onFailure { Timber.e(it, "periodic SponsorBlock skip failed") }
                     }
                 }
                 delay(250)
@@ -1895,6 +1907,10 @@ class MusicService :
     private fun enqueueNextAutomixItemIfNeeded() {
         if (automixItems.value.isEmpty() || player.mediaItemCount == 0) return
         if (player.repeatMode != REPEAT_MODE_OFF || player.currentTimeline.isEmpty) return
+        // On TV, automix only applies to normal (audio) songs. While a video-backed
+        // song is playing it is disabled so SponsorBlock and the video queue behave
+        // normally; the next video song is picked up via onMediaItemTransition instead.
+        if (isTvDevice && isVideoMode) return
 
         val nextIndex = player.currentTimeline.getNextWindowIndex(
             player.currentMediaItemIndex,
@@ -2223,40 +2239,47 @@ class MusicService :
                 if (isVideoMode) {
                     _isVideoSwitching.value = true
                 }
-                scope.launch {
-                    try {
-                        val isVideoSong = mediaItem.metadata?.isVideoSong == true
+                val videoModeEnabledPref = dataStore.get(VideoModeEnabledKey, true)
+                val isVideoSong = mediaItem.metadata?.isVideoSong == true
 
-                        if (isVideoSong && isVideoMode) {
-                            // Already in video mode and next song is also a video song.
-                            // Always re-enable video mode regardless of checkVideoAvailability
-                            // to avoid black screen on auto-transition.
-                            if (currentVideoSourceMediaId != newMediaId) {
-                                Timber.d("onMediaItemTransition: Re-enabling video mode for next video song: $newMediaId")
-                                setVideoMode(true)
+                if (isVideoSong && videoModeEnabledPref) {
+                    // A video song with the user's video toggle ON.
+                    scope.launch {
+                        try {
+                            if (isVideoMode) {
+                                // Already in video mode and next song is also a video song.
+                                // Always re-enable video mode regardless of checkVideoAvailability
+                                // to avoid black screen on auto-transition.
+                                if (currentVideoSourceMediaId != newMediaId) {
+                                    Timber.d("onMediaItemTransition: Re-enabling video mode for next video song: $newMediaId")
+                                    setVideoMode(true)
+                                } else {
+                                    // Video already resolved for this song — nothing to refetch.
+                                    _isVideoSwitching.value = false
+                                }
                             } else {
-                                // Video already resolved for this song — nothing to refetch.
-                                _isVideoSwitching.value = false
-                            }
-                        } else if (isVideoSong) {
-                            // Not yet in video mode. Skip the separate availability probe —
-                            // it triggers a full NewPipe stream extraction on top of the one
-                            // setVideoMode already performs, doubling the wait before the video
-                            // appears on TV. setVideoMode resolves the stream itself and falls
-                            // back gracefully when nothing is playable.
-                            val videoModeEnabledPref = dataStore.get(VideoModeEnabledKey, true)
-                            if (videoModeEnabledPref) {
+                                // Not yet in video mode. Skip the separate availability probe —
+                                // it triggers a full NewPipe stream extraction on top of the one
+                                // setVideoMode already performs, doubling the wait before the video
+                                // appears on TV. setVideoMode resolves the stream itself and falls
+                                // back gracefully when nothing is playable.
+                                Timber.d("onMediaItemTransition: Auto-enabling video mode for video song: $newMediaId")
                                 setVideoMode(true)
                             }
-                        } else if (isVideoMode) {
-                            // New song is NOT a video. On a genuine song transition the queue
-                            // item is already the audio version, so there is nothing to restore
-                            // — just drop the stale video-mode state. (switchToAudioMode would
-                            // wrongly re-inject the PREVIOUS song's audio item here.)
-                            resetVideoMode()
+                        } catch (e: Exception) {
+                            Timber.e(e, "onMediaItemTransition: Error auto-enabling video mode")
                         }
-                    } catch (e: Exception) {
-                        Timber.e(e, "onMediaItemTransition: Error auto-enabling video mode")
+                    }
+                } else {
+                    // Either a normal (audio) song, or a video song while the user has
+                    // the video toggle OFF. Never force video mode here — a video song
+                    // must still play as audio. Drop any stale video mode so the current
+                    // item is its audio version and playback continues normally.
+                    if (isVideoMode) {
+                        Timber.d("onMediaItemTransition: Dropping video mode (toggle off or non-video song)")
+                        resetVideoMode()
+                    } else {
+                        _isVideoSwitching.value = false
                     }
                 }
             }
@@ -3688,6 +3711,14 @@ class MusicService :
     private var currentVideoSourceMediaId: String? = null
     private var originalAudioMediaItem: MediaItem? = null
     private var videoSwitchJob: Job? = null
+    // TV builds hold playback until the video's first frame is rendered so the
+    // next song's audio never starts before its video is visible. Cleared by the
+    // first-frame callback, its 8s safety timeout, or resetVideoMode().
+    private var videoFirstFrameListener: AnalyticsListener? = null
+
+    private val isTvDevice: Boolean by lazy {
+        packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+    }
     // Tracks the last mediaId reported by onMediaItemTransition. Used to detect a
     // REAL song change: replacing the current item with its video version (or the
     // merged source swap) fires a transition with the SAME mediaId, which must not
@@ -3736,6 +3767,10 @@ class MusicService :
 
     private fun resetVideoMode() {
         videoSwitchJob?.cancel()
+        videoFirstFrameListener?.let { matchingListener ->
+            runCatching { player.removeAnalyticsListener(matchingListener) }
+        }
+        videoFirstFrameListener = null
         _videoModeEnabled.value = false
         _isVideoSwitching.value = false
         isVideoMode = false
@@ -3747,6 +3782,53 @@ class MusicService :
         _videoModeMessage.value = null
         _availableSubtitles.value = emptyList()
         _selectedSubtitleIndex.value = -1
+    }
+
+    /**
+     * On TV builds, once a video source has been injected and prepared, we wait
+     * for its first frame to be rendered before resuming playback. This prevents
+     * the "audio plays / black video" gap when starting the next video song.
+     */
+    private suspend fun waitForFirstVideoFrameThenResume(wasPlaying: Boolean) {
+        val firstFrame = CompletableDeferred<Unit>()
+        val listener = object : AnalyticsListener {
+            override fun onRenderedFirstFrame(
+                eventTime: AnalyticsListener.EventTime,
+                surface: Any,
+                renderTimeMs: Long,
+            ) {
+                if (!firstFrame.isCompleted) {
+                    firstFrame.complete(Unit)
+                }
+            }
+        }
+        videoFirstFrameListener = listener
+        runCatching { player.addAnalyticsListener(listener) }
+        try {
+            withTimeout(10_000L) {
+                firstFrame.await()
+            }
+            Timber.d("waitForFirstVideoFrameThenResume: video first frame rendered, resuming playback")
+        } catch (e: TimeoutCancellationException) {
+            Timber.w("waitForFirstVideoFrameThenResume: timed out waiting for first frame")
+        } finally {
+            runCatching { player.removeAnalyticsListener(listener) }
+            if (videoFirstFrameListener === listener) {
+                videoFirstFrameListener = null
+            }
+        }
+        player.playWhenReady = wasPlaying
+    }
+
+    /**
+     * If TV video mode paused playback (pause-until-first-frame behaviour) and it
+     * turns out no video can be shown, resume the audio so the user isn't stuck silent.
+     */
+    private fun restoreTvPlaybackIfPaused(wasPlaying: Boolean) {
+        if (isTvDevice && wasPlaying && !player.playWhenReady) {
+            player.playWhenReady = true
+            Timber.d("restoreTvPlaybackIfPaused: Video failed, resuming audio playback")
+        }
     }
 
     /**
@@ -3815,6 +3897,12 @@ class MusicService :
                 if (enabled) {
                     // Don't pause audio — let it keep playing while we load video
                     // This prevents the audio stutter/gap during video mode switch
+                    // (EXCEPT on TV: there we pause immediately so the audio-only item
+                    // never plays while the video is still being fetched.)
+                    if (isTvDevice && wasPlaying) {
+                        player.playWhenReady = false
+                        _isVideoSwitching.value = true
+                    }
                     
                     // Save original item before switching
                     originalAudioMediaItem = player.getMediaItemAt(index)
@@ -3967,6 +4055,7 @@ class MusicService :
                                     Timber.e("setVideoMode: Video URL is blank after parsing")
                                     _videoFetchError.value = "Video URL is empty - This song may not have a video available"
                                     _videoModeMessage.value = "No video available for this song"
+                                    restoreTvPlaybackIfPaused(wasPlaying)
                                     resetVideoMode()
                                     return@launch
                                 }
@@ -4053,7 +4142,13 @@ class MusicService :
                                     player.seekTo(index, position)
                                     Timber.d("setVideoMode: Seeked to position $position")
                                 }
-                                player.playWhenReady = wasPlaying
+                                if (isTvDevice && wasPlaying) {
+                                    // TV: hold playback silent until the first frame is actually
+                                    // rendered, so we never hear the audio before the video shows.
+                                    waitForFirstVideoFrameThenResume(wasPlaying)
+                                } else {
+                                    player.playWhenReady = wasPlaying
+                                }
                                 isVideoMode = true
                                 _videoModeEnabled.value = true
                                 currentVideoSourceMediaId = mediaId
@@ -4067,11 +4162,13 @@ class MusicService :
                                 Timber.e("setVideoMode: Failed to get stream URL from search result")
                                 _videoFetchError.value = "Failed to load video stream"
                                 _videoModeMessage.value = "Could not load video"
+                                restoreTvPlaybackIfPaused(wasPlaying)
                                 resetVideoMode()
                             }
                         } else {
                             _videoFetchError.value = "No video found for this song"
                             _videoModeMessage.value = "No video available for this song"
+                            restoreTvPlaybackIfPaused(wasPlaying)
                             resetVideoMode()
                         }
                     } else {
@@ -4079,6 +4176,7 @@ class MusicService :
                         Timber.e("setVideoMode: Fallback search failed: $errorMsg")
                         _videoFetchError.value = "No video available: $errorMsg"
                         _videoModeMessage.value = "No video found for this song"
+                        restoreTvPlaybackIfPaused(wasPlaying)
                         resetVideoMode()
                     }
                 } else {
@@ -4102,6 +4200,9 @@ class MusicService :
                 isVideoMode = false
                 _videoModeEnabled.value = false
                 originalAudioMediaItem = null
+                if (isTvDevice && !player.playWhenReady) {
+                    player.playWhenReady = true
+                }
             } finally {
                 _isVideoSwitching.value = false
             }
@@ -4164,6 +4265,14 @@ class MusicService :
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         if (!crossfadeEnabled) return
+        // On TV, never automix/crossfade into a video-backed song: the secondary
+        // player copies the whole queue (including the injected video sources), which
+        // tears down video mode and can crash the app. Video songs finish naturally and
+        // let onMediaItemTransition handle the switch so SponsorBlock keeps working.
+        if (isTvDevice && isVideoMode) {
+            Timber.d("scheduleCrossfade: Skipping crossfade while in video mode on TV")
+            return
+        }
         // Repeat-one must finish naturally and restart the same item; blending into another
         // item would violate the user's explicit repeat command.
         if (player.repeatMode == REPEAT_MODE_ONE) return
@@ -4265,6 +4374,11 @@ class MusicService :
     
     private fun startCrossfade() {
         if (isCrossfading) return
+        // Same guard as scheduleCrossfade: never crossfade a video-backed song on TV.
+        if (isTvDevice && isVideoMode) {
+            Timber.d("startCrossfade: Skipping crossfade while in video mode on TV")
+            return
+        }
         val nextIndex = nextCrossfadeMediaItemIndex()
         if (nextIndex == C.INDEX_UNSET) return
         val outgoingMediaId = player.currentMediaItem?.mediaId ?: return
