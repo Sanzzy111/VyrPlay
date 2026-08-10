@@ -167,8 +167,8 @@ class AuraMusicWidgetManager @Inject constructor(
             views.setImageViewBitmap(R.id.widget_album_art, getRoundedDefaultIcon(48f))
         }
 
-        // Set play/pause icon
-        val playPauseIcon = if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
+        // Set play/pause icon (dark variant, the button background is a white circle)
+        val playPauseIcon = if (isPlaying) R.drawable.ic_widget_pause_dark else R.drawable.ic_widget_play_dark
         views.setImageViewResource(R.id.widget_play_pause, playPauseIcon)
 
         // Set like icon - using nav style (purple) for main widget
@@ -242,10 +242,10 @@ class AuraMusicWidgetManager @Inject constructor(
 
         // Set album art with rounded corners
         if (albumArt != null) {
-            val roundedAlbumArt = getRoundedCornerBitmap(albumArt, 48f)
+            val roundedAlbumArt = getRoundedCornerBitmap(albumArt, 0f)
             views.setImageViewBitmap(R.id.widget_compact_album_art, roundedAlbumArt)
         } else {
-            views.setImageViewBitmap(R.id.widget_compact_album_art, getRoundedDefaultIcon(48f))
+            views.setImageViewBitmap(R.id.widget_compact_album_art, getRoundedDefaultIcon(0f))
         }
 
         // Set play/pause icon - using low style icons

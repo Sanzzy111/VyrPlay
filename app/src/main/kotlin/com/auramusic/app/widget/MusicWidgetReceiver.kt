@@ -46,7 +46,7 @@ class MusicWidgetReceiver : AppWidgetProvider() {
                 val views = RemoteViews(context.packageName, R.layout.widget_music_player)
                 views.setTextViewText(R.id.widget_song_title, context.getString(R.string.no_song_playing))
                 views.setTextViewText(R.id.widget_artist_name, context.getString(R.string.tap_to_open))
-                views.setImageViewResource(R.id.widget_play_pause, R.drawable.ic_widget_play)
+                views.setImageViewResource(R.id.widget_play_pause, R.drawable.ic_widget_play_dark)
                 views.setImageViewResource(R.id.widget_like_button, R.drawable.ic_widget_heart_outline_nav)
                 views.setOnClickPendingIntent(R.id.widget_album_art, getOpenAppIntent(context))
                 views.setOnClickPendingIntent(R.id.widget_play_pause, getActionIntent(context, ACTION_PLAY_PAUSE))

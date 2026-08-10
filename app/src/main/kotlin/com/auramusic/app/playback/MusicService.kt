@@ -231,6 +231,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
@@ -3592,31 +3594,40 @@ class MusicService :
     }
 
     /**
-     * Updates all app widgets with current playback state
+     * Updates all app widgets with current playback state.
+     *
+     * Serialized through [widgetUpdateMutex] so concurrent invocations (the
+     * periodic 200ms loop, song changes and widget button actions) never run
+     * `updateWidgets` in parallel. Without this, out-of-order album-art loads
+     * could leave the widget showing a previous song's title/artwork.
      */
     private fun updateWidgetUI(isPlaying: Boolean) {
         scope.launch {
-            try {
-                val songData = currentSong.value
-                val song = songData?.song
-                val songTitle = song?.title ?: getString(R.string.no_song_playing)
-                val artistName = songData?.artists?.joinToString(", ") { it.name } ?: getString(R.string.tap_to_open)
-                val isLiked = songData?.song?.liked == true
+            widgetUpdateMutex.withLock {
+                try {
+                    val songData = currentSong.value
+                    val song = songData?.song
+                    val songTitle = song?.title ?: getString(R.string.no_song_playing)
+                    val artistName = songData?.artists?.joinToString(", ") { it.name } ?: getString(R.string.tap_to_open)
+                    val isLiked = songData?.song?.liked == true
 
-                widgetManager.updateWidgets(
-                    title = songTitle,
-                    artist = artistName,
-                    artworkUri = song?.thumbnailUrl,
-                    isPlaying = isPlaying,
-                    isLiked = isLiked,
-                    duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
-                    currentPosition = player.currentPosition
-                )
-            } catch (e: Exception) {
-                // Widget not added to home screen or other error
+                    widgetManager.updateWidgets(
+                        title = songTitle,
+                        artist = artistName,
+                        artworkUri = song?.thumbnailUrl,
+                        isPlaying = isPlaying,
+                        isLiked = isLiked,
+                        duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
+                        currentPosition = player.currentPosition
+                    )
+                } catch (e: Exception) {
+                    // Widget not added to home screen or other error
+                }
             }
         }
     }
+
+    private val widgetUpdateMutex = Mutex()
 
     private var widgetUpdateJob: Job? = null
 
