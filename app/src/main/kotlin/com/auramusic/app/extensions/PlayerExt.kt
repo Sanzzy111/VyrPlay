@@ -38,10 +38,18 @@ fun Player.getQueueWindows(): List<Timeline.Window> {
     if (timeline.isEmpty) {
         return emptyList()
     }
+    // During video-mode source replacement the timeline can be momentarily
+    // non-empty while currentMediaItemIndex is still -1 (C.INDEX_UNSET).
+    // getWindow(-1) throws IndexOutOfBoundsException on the main thread and
+    // kills the process, so bail out with an empty list in that window.
+    val currentIndex = currentMediaItemIndex
+    if (currentIndex == C.INDEX_UNSET || currentIndex < 0 || currentIndex >= timeline.windowCount) {
+        return emptyList()
+    }
     val queue = ArrayDeque<Timeline.Window>()
     val queueSize = timeline.windowCount
 
-    val currentMediaItemIndex: Int = currentMediaItemIndex
+    val currentMediaItemIndex: Int = currentIndex
     queue.add(timeline.getWindow(currentMediaItemIndex, Timeline.Window()))
 
     var firstMediaItemIndex = currentMediaItemIndex

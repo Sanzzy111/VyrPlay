@@ -2237,11 +2237,13 @@ class MusicService :
                                 _isVideoSwitching.value = false
                             }
                         } else if (isVideoSong) {
-                            // Not yet in video mode, check availability first
-                            val isVideoAvailable = checkVideoAvailability(newMediaId)
+                            // Not yet in video mode. Skip the separate availability probe —
+                            // it triggers a full NewPipe stream extraction on top of the one
+                            // setVideoMode already performs, doubling the wait before the video
+                            // appears on TV. setVideoMode resolves the stream itself and falls
+                            // back gracefully when nothing is playable.
                             val videoModeEnabledPref = dataStore.get(VideoModeEnabledKey, true)
-
-                            if (videoModeEnabledPref && isVideoAvailable) {
+                            if (videoModeEnabledPref) {
                                 setVideoMode(true)
                             }
                         } else if (isVideoMode) {
@@ -2741,6 +2743,15 @@ class MusicService :
                 waitOnNetworkError()
                 return
             }
+        }
+        
+        // PARSING CONTAINER MALFORMED usually means the stream URL served non-media
+        // bytes (expired/invalid URL, bot-check page) rather than a genuinely corrupt
+        // file. Re-resolve the URL once with fresh tokens instead of stopping.
+        if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED) {
+            Timber.tag(TAG).d("Parsing container malformed error detected, refreshing stream URL")
+            handleGenericIOError(mediaId)
+            return
         }
         
         // For IO_UNSPECIFIED and IO_BAD_HTTP_STATUS, try recovery first
@@ -3244,7 +3255,18 @@ class MusicService :
                 recoverSong(mediaId, nonNullPlayback)
             }
 
-            return@Factory dataSpec.withUri(streamUri).subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)
+            // Subrange the resolved spec to the requested position. The old code
+            // subranged at dataSpec.uriPositionOffset (always 0), so every chunked
+            // re-open re-requested bytes [0, CHUNK_LENGTH) regardless of where
+            // ExoPlayer actually was — the container parser then got duplicated/
+            // misplaced bytes and died with PARSING CONTAINER MALFORMED (3001),
+            // or the server rejected the odd request with an IO error (2000).
+            val chunkLength = if (dataSpec.length == C.LENGTH_UNSET.toLong()) {
+                CHUNK_LENGTH
+            } else {
+                minOf(CHUNK_LENGTH, dataSpec.length - dataSpec.position)
+            }
+            return@Factory dataSpec.withUri(streamUri).subrange(dataSpec.position, chunkLength)
         }
     }
 
@@ -4001,8 +4023,15 @@ class MusicService :
                                         val merged = MergingMediaSource(true, true, videoSource, audioSource)
 
                                         Timber.d("setVideoMode: Injecting MergingMediaSource at index $index (${streamSource.height}p video + audio)")
+                                        // Insert the merged source AFTER the current item, then remove the
+                                        // current (audio) item. ExoPlayer advances onto the merged source —
+                                        // same mediaId, so NO onMediaItemTransition fires and no re-entrant
+                                        // video switch is triggered. Removing the current item FIRST makes
+                                        // ExoPlayer auto-advance to the NEXT song, firing a real transition
+                                        // that races this job and ends up playing the wrong song or crashing.
+                                        val insertIndex = (index + 1).coerceAtMost(player.mediaItemCount)
+                                        player.addMediaSource(insertIndex, merged)
                                         player.removeMediaItem(index)
-                                        player.addMediaSource(index, merged)
                                     }
                                 }
                                 player.prepare()
