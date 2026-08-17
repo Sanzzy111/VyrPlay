@@ -20,7 +20,7 @@ object DiscordExternalAssets {
     private const val CACHE_MAX_SIZE = 128
 
     private val client: HttpClient by lazy {
-        HttpClient(io.ktor.client.engine.cio.CIO) {
+        HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
             install(io.ktor.client.plugins.HttpTimeout) {
                 requestTimeoutMillis = 10_000L
                 connectTimeoutMillis = 5_000L

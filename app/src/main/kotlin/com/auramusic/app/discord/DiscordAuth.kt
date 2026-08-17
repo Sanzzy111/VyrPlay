@@ -11,7 +11,7 @@ import com.auramusic.app.discord.DiscordDefaults.DISCORD_OAUTH_AUTHORIZE
 import com.auramusic.app.discord.DiscordDefaults.DISCORD_OAUTH_TOKEN
 import com.auramusic.app.discord.DiscordDefaults.DISCORD_SCOPES
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.HttpResponse
@@ -225,7 +225,7 @@ class DiscordAuth(
         private const val TAG = "DiscordSvc"
         const val REDIRECT_URI = "auramusicdiscord://oauth2/callback"
 
-        private fun defaultClient(): HttpClient = HttpClient(CIO) {
+        private fun defaultClient(): HttpClient = HttpClient(OkHttp) {
             install(HttpTimeout) {
                 requestTimeoutMillis = 15_000L
                 connectTimeoutMillis = 10_000L
