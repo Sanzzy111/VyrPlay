@@ -76,21 +76,21 @@ object YTPlayerUtils {
         val videoDetails = mainPlayerResponse?.videoDetails
         val playbackTracking = mainPlayerResponse?.playbackTracking
 
-        // Order in which clients are used to build a usable stream URL:
-        // - Logged out: MAIN_CLIENT first (works reliably without a session).
-        // - Logged in: YouTube bot-checks the login-bound WEB_REMIX stream URLs
-        //   and serves them only after an attestation check that fails for
-        //   non-browser clients, so resolution "succeeds" but the actual fetch
-        //   dies with IO_UNSPECIFIED (2000). Prefer the non-auth guest clients
-        //   first in that case so playback keeps working; keep MAIN_CLIENT for
-        //   metadata (loudness / history tracking) and as a last resort for
-        //   age-restricted content that genuinely needs a session.
-        val streamClients: Array<YouTubeClient> = (if (isLoggedIn) {
-            arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID) +
+        // Order in which clients are used to build a usable stream URL.
+        // YouTube bot-checks web clients (WEB_REMIX) and serves their stream
+        // URLs only after an attestation check that fails for non-browser apps,
+        // so resolution "succeeds" but the actual fetch dies with
+        // IO_UNSPECIFIED (2000) — both when logged in (login-bound URLs) and
+        // when logged out. Always prefer the non-auth guest clients first,
+        // regardless of login state. Keep MAIN_CLIENT for metadata (loudness /
+        // history tracking) and as a last resort for age-restricted content that
+        // genuinely needs a session. Note: ANDROID is loginSupported=true, so it
+        // is deliberately kept AFTER the truly cookie-free clients to avoid
+        // re-introducing the bot-check for signed-in users.
+        val streamClients: Array<YouTubeClient> = (
+            arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK) +
                 arrayOf(MAIN_CLIENT) + STREAM_FALLBACK_CLIENTS
-        } else {
-            arrayOf(MAIN_CLIENT) + STREAM_FALLBACK_CLIENTS
-        }).distinct().toTypedArray()
+            ).distinct().toTypedArray()
 
         var fallbackFailure: String? = null
         for (client in streamClients) {
@@ -102,8 +102,16 @@ object YTPlayerUtils {
             val response = if (client == MAIN_CLIENT && mainPlayerResponse != null) {
                 mainPlayerResponse
             } else {
+                // Guest clients must never carry the user's session, otherwise a
+                // logged-in request to a cookie-free fallback still bot-checks.
                 val clientPoToken = poTokenProvider?.getPlayerPoToken(videoId)
-                YouTube.player(videoId, playlistId, client, poToken = clientPoToken)
+                YouTube.player(
+                    videoId,
+                    playlistId,
+                    client,
+                    poToken = clientPoToken,
+                    setLogin = client == MAIN_CLIENT,
+                )
                     .getOrNull()
                     ?: run {
                         Timber.tag(logTag).d("Skipping client ${client.clientName} - player response failed")
@@ -227,8 +235,32 @@ return format
 
         val signatureTimestamp = getSignatureTimestampOrNull(videoId)
         val poToken = poTokenProvider?.getPlayerPoToken(videoId)
+
+        // WEB_REMIX video streams are bot-checked (IO_UNSPECIFIED 2000) whether
+        // the user is logged in or not. Prefer the non-auth guest clients first
+        // so video keeps working regardless of session state; MAIN_CLIENT is used
+        // for metadata and as a last resort for age-restricted content.
+        val guestClients = arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID)
+        for (client in guestClients) {
+            val guestResponse = YouTube.player(
+                videoId,
+                playlistId,
+                client,
+                poToken = poToken,
+                setLogin = false,
+            ).getOrNull() ?: continue
+            val guestMuxed = guestResponse.streamingData?.formats?.filter { it.isVideo }?.maxByOrNull { it.bitrate }
+            val guestFormat = guestMuxed ?: guestResponse.streamingData?.adaptiveFormats
+                ?.filter { it.isVideo }?.maxByOrNull { it.bitrate } ?: continue
+            val guestUrl = findUrlOrNull(guestFormat, videoId, guestResponse)
+                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
+            if (guestUrl != null) {
+                Timber.tag(logTag).d("Found video stream from guest client ${client.clientName}")
+                return@runCatching guestUrl
+            }
+        }
+
         val mainPlayerResponse = YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp, poToken).getOrNull()
-        val isLoggedIn = YouTube.cookie != null
 
         // Try muxed formats first (contain both video and audio in one stream)
         val muxedFormats = mainPlayerResponse?.streamingData?.formats ?: emptyList()
@@ -257,23 +289,6 @@ return format
             if (url != null) {
                 Timber.tag(logTag).d("Found video-only format (no audio): ${videoOnlyFormat.mimeType}, resolution: ${videoOnlyFormat.height}p")
                 return@runCatching url
-            }
-        }
-
-        // Logged-in WEB_REMIX video streams are bot-checked like audio streams;
-        // fall back to the non-auth guest clients so video keeps working.
-        if (isLoggedIn || mainPlayerResponse == null) {
-            for (client in arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID)) {
-                val guestResponse = YouTube.player(videoId, playlistId, client, poToken = poToken).getOrNull() ?: continue
-                val guestMuxed = guestResponse.streamingData?.formats?.filter { it.isVideo }?.maxByOrNull { it.bitrate }
-                val guestFormat = guestMuxed ?: guestResponse.streamingData?.adaptiveFormats
-                    ?.filter { it.isVideo }?.maxByOrNull { it.bitrate } ?: continue
-                val guestUrl = findUrlOrNull(guestFormat, videoId, guestResponse)
-                    ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
-                if (guestUrl != null) {
-                    Timber.tag(logTag).d("Found video stream from guest client ${client.clientName}")
-                    return@runCatching guestUrl
-                }
             }
         }
 

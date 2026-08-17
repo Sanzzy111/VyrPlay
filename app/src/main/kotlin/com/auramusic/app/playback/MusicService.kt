@@ -110,6 +110,7 @@ import com.auramusic.app.constants.VideoQuality
 import com.auramusic.app.constants.VideoQualityKey
 import com.auramusic.app.constants.CrossfadeEnabledKey
 import com.auramusic.app.constants.AutomixEnabledKey
+import com.auramusic.app.constants.AutomixBlendPercentKey
 import com.auramusic.app.constants.CrossfadeGaplessKey
 import com.auramusic.app.constants.DisableLoadMoreWhenRepeatAllKey
 import com.auramusic.app.constants.DiscordUseDetailsKey
@@ -388,6 +389,7 @@ class MusicService :
     private var crossfadeGapless = true
     private var crossfadeTriggerJob: Job? = null
     private var automixEnabled = false
+    private var automixBlendPercent = 90f
     
     private val secondaryPlayerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
@@ -1056,23 +1058,25 @@ class MusicService :
         // Automix: when enabled, force crossfade on with DJ-optimized settings
         dataStore.data
             .map { prefs ->
-                Pair(
+                Triple(
                     prefs[AutomixEnabledKey] ?: false,
                     Triple(
                         prefs[CrossfadeEnabledKey] ?: false,
                         prefs[CrossfadeDurationKey] ?: 5f,
                         prefs[CrossfadeGaplessKey] ?: true,
                     ),
+                    prefs[AutomixBlendPercentKey] ?: 90f,
                 )
             }
             .distinctUntilChanged()
-            .collect(scope) { (enabled, crossfadePreferences) ->
+            .collect(scope) { (enabled, crossfadePreferences, blendPercent) ->
                 automixEnabled = enabled
+                automixBlendPercent = blendPercent.coerceIn(10f, 100f)
                 if (enabled) {
                     crossfadeEnabled = true
                     crossfadeDuration = 4000f // 4 second DJ-style crossfade
                     crossfadeGapless = false  // Always crossfade in automix mode
-                    Timber.tag(TAG).i("Automix enabled: crossfade=4s, gapless=false")
+                    Timber.tag(TAG).i("Automix enabled: crossfade=4s, gapless=false, blend=$automixBlendPercent%")
                 } else {
                     crossfadeEnabled = crossfadePreferences.first
                     crossfadeDuration = crossfadePreferences.second * 1000f
@@ -4265,12 +4269,13 @@ class MusicService :
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         if (!crossfadeEnabled) return
-        // On TV, never automix/crossfade into a video-backed song: the secondary
-        // player copies the whole queue (including the injected video sources), which
-        // tears down video mode and can crash the app. Video songs finish naturally and
-        // let onMediaItemTransition handle the switch so SponsorBlock keeps working.
-        if (isTvDevice && isVideoMode) {
-            Timber.d("scheduleCrossfade: Skipping crossfade while in video mode on TV")
+        // Never automix/crossfade into a video-backed song: the secondary player
+        // copies the whole queue (including the injected video sources), which
+        // tears down video mode and can crash the app or leave a black video
+        // surface on the phone. Video songs finish naturally and let
+        // onMediaItemTransition handle the switch so SponsorBlock keeps working.
+        if (isVideoMode) {
+            Timber.d("scheduleCrossfade: Skipping crossfade while in video mode")
             return
         }
         // Repeat-one must finish naturally and restart the same item; blending into another
@@ -4291,9 +4296,11 @@ class MusicService :
         if (crossfadeGapless && isNextItemGapless()) return
         if (nextCrossfadeMediaItemIndex() == C.INDEX_UNSET) return
         
-        // Automix starts the blend once 90% of the current song has played.
+        // Automix starts the blend once the configured % of the current song has
+        // played (default 90%). Uses a linear fade for a DJ-style mix.
+        val triggerPercent = if (automixEnabled) automixBlendPercent / 100f else 0f
         val triggerOffset = if (automixEnabled) {
-            (player.duration * 0.90f).toLong()
+            (player.duration * triggerPercent).toLong()
         } else {
             player.duration - crossfadeDuration.toLong()
         }
@@ -4374,9 +4381,10 @@ class MusicService :
     
     private fun startCrossfade() {
         if (isCrossfading) return
-        // Same guard as scheduleCrossfade: never crossfade a video-backed song on TV.
-        if (isTvDevice && isVideoMode) {
-            Timber.d("startCrossfade: Skipping crossfade while in video mode on TV")
+        // Same guard as scheduleCrossfade: never crossfade a video-backed song —
+        // the swap tears down video mode and leaves a black video surface.
+        if (isVideoMode) {
+            Timber.d("startCrossfade: Skipping crossfade while in video mode")
             return
         }
         val nextIndex = nextCrossfadeMediaItemIndex()

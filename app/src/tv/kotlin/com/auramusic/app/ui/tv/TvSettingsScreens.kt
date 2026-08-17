@@ -94,6 +94,7 @@ import com.auramusic.app.constants.AccountEmailKey
 import com.auramusic.app.constants.AccountNameKey
 import com.auramusic.app.constants.AudioNormalizationKey
 import com.auramusic.app.constants.AutomixEnabledKey
+import com.auramusic.app.constants.AutomixBlendPercentKey
 import com.auramusic.app.constants.AudioQuality
 import com.auramusic.app.constants.AudioQualityKey
 import com.auramusic.app.constants.CrossfadeDurationKey
@@ -121,6 +122,7 @@ import com.auramusic.innertube.utils.parseCookieString
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.roundToInt
 
 /* -------------------------- Login (WebView) -------------------------- */
 
@@ -1175,6 +1177,14 @@ fun TvPlaybackSettingsScreen(
     val (crossfadeDuration, onCrossfadeDurationChange) = rememberPreference(
         com.auramusic.app.constants.CrossfadeDurationKey, 5f,
     )
+    val (automixEnabled, onAutomixEnabledChange) = rememberPreference(
+        AutomixEnabledKey,
+        defaultValue = false,
+    )
+    val (automixBlendPercent, onAutomixBlendPercentChange) = rememberPreference(
+        AutomixBlendPercentKey,
+        defaultValue = 90f,
+    )
     val (videoModeEnabled, onVideoModeEnabledChange) = rememberPreference(
         com.auramusic.app.constants.VideoModeEnabledKey, true,
     )
@@ -1308,15 +1318,24 @@ fun TvPlaybackSettingsScreen(
 
         // Automix toggle
         item {
-            val (automixEnabled, onAutomixEnabledChange) = rememberPreference(
-                AutomixEnabledKey,
-                defaultValue = false,
-            )
             TvSettingsToggle(
                 title = "Automix",
                 checked = automixEnabled,
                 onCheckedChange = onAutomixEnabledChange,
             )
+        }
+
+        if (automixEnabled) {
+            item {
+                TvSliderRow(
+                    title = "Automix Blend Point",
+                    subtitle = "${automixBlendPercent.roundToInt()}%",
+                    value = automixBlendPercent,
+                    valueRange = 50f..100f,
+                    steps = 9,
+                    onValueChange = onAutomixBlendPercentChange,
+                )
+            }
         }
 
         item {

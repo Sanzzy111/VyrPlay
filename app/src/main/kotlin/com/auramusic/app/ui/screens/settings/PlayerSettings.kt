@@ -58,6 +58,7 @@ import com.auramusic.app.constants.AutoDownloadOnLikeKey
 import com.auramusic.app.constants.CrossfadeDurationKey
 import com.auramusic.app.constants.CrossfadeEnabledKey
 import com.auramusic.app.constants.AutomixEnabledKey
+import com.auramusic.app.constants.AutomixBlendPercentKey
 import com.auramusic.app.constants.CrossfadeGaplessKey
 import com.auramusic.app.constants.AutoLoadMoreKey
 import com.auramusic.app.constants.AutoSkipNextOnErrorKey
@@ -129,6 +130,10 @@ fun PlayerSettings(
     val (automixEnabled, onAutomixEnabledChange) = rememberPreference(
         AutomixEnabledKey,
         defaultValue = false
+    )
+    val (automixBlendPercent, onAutomixBlendPercentChange) = rememberPreference(
+        AutomixBlendPercentKey,
+        defaultValue = 90f
     )
     val (persistentQueue, onPersistentQueueChange) = rememberPreference(
         PersistentQueueKey,
@@ -450,6 +455,23 @@ fun PlayerSettings(
                     },
                     onClick = { onAutomixEnabledChange(!automixEnabled) }
                 ))
+                if (automixEnabled) {
+                    add(Material3SettingsItem(
+                        icon = painterResource(R.drawable.album),
+                        title = { Text("Automix Blend Point") },
+                        description = {
+                            Column {
+                                Text("${automixBlendPercent.roundToInt()}%")
+                                Slider(
+                                    value = automixBlendPercent,
+                                    onValueChange = onAutomixBlendPercentChange,
+                                    valueRange = 50f..100f,
+                                    steps = 9
+                                )
+                            }
+                        }
+                    ))
+                }
                 add(Material3SettingsItem(
                     icon = painterResource(R.drawable.history),
                     title = { Text(stringResource(R.string.history_duration)) },
