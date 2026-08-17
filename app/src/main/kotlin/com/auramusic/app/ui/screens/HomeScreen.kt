@@ -415,12 +415,45 @@ fun HomeScreen(
                         }
                     )
             )
-            is Album -> {
-                navController.navigate("album/${it.id}")
-            }
-            is Artist -> {
-                navController.navigate("artist/${it.id}")
-            }
+            is Album -> AlbumGridItem(
+                album = it,
+                isActive = it.id == mediaMetadata?.album?.id,
+                isPlaying = isPlaying,
+                coroutineScope = scope,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { navController.navigate("album/${it.id}") },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                AlbumMenu(
+                                    originalAlbum = it,
+                                    navController = navController,
+                                    onDismiss = menuState::dismiss
+                                )
+                            }
+                        }
+                    )
+            )
+            is Artist -> ArtistGridItem(
+                artist = it,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { navController.navigate("artist/${it.id}") },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                ArtistMenu(
+                                    originalArtist = it,
+                                    coroutineScope = scope,
+                                    onDismiss = menuState::dismiss
+                                )
+                            }
+                        }
+                    )
+            )
             is Playlist -> {}
         }
     }
@@ -1051,76 +1084,140 @@ item(key = "speed_dial_shuffle") {
                         )
                     }
 
-                    item(key = "quick_picks_list") {
-                        LazyHorizontalGrid(
-                            state = quickPicksLazyGridState,
-                            rows = GridCells.Fixed(4),
-                            flingBehavior = rememberSnapFlingBehavior(quickPicksSnapLayoutInfoProvider),
-                            contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-                                .asPaddingValues(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(ListItemHeight * 4)
-                                .animateItem()
-                        ) {
-                            items(
-                                items = quickPicks.distinctBy { it.id },
-                                key = { it.id }
-                            ) { originalSong ->
-                                // fetch song from database to keep updated
-                                val song by database.song(originalSong.id)
-                                    .collectAsState(initial = originalSong)
+                    if (homeLayoutMode == HomeLayoutMode.LIST) {
+                        item(key = "quick_picks_list") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateItem()
+                            ) {
+                                quickPicks.distinctBy { it.id }.take(10).forEach { originalSong ->
+                                    val song by database.song(originalSong.id)
+                                        .collectAsState(initial = originalSong)
 
-                                SongListItem(
-                                    song = song!!,
-                                    showInLibraryIcon = true,
-                                    isActive = song!!.id == mediaMetadata?.id,
-                                    isPlaying = isPlaying,
-                                    isSwipeable = false,
-                                    trailingContent = {
-                                        IconButton(
-                                            onClick = {
-                                                menuState.show {
-                                                    SongMenu(
-                                                        originalSong = song!!,
-                                                        navController = navController,
-                                                        onDismiss = menuState::dismiss
-                                                    )
-                                                }
-                                            }
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.more_vert),
-                                                contentDescription = null
-                                            )
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .width(horizontalLazyGridItemWidth)
-                                        .combinedClickable(
-                                            onClick = {
-                                                if (song!!.id == mediaMetadata?.id) {
-                                                    playerConnection.togglePlayPause()
-                                                } else {
-                                                    playerConnection.playQueue(
-                                                        YouTubeQueue.radio(
-                                                            song!!.toMediaMetadata()
+                                    SongListItem(
+                                        song = song!!,
+                                        showInLibraryIcon = true,
+                                        isActive = song!!.id == mediaMetadata?.id,
+                                        isPlaying = isPlaying,
+                                        isSwipeable = false,
+                                        trailingContent = {
+                                            IconButton(
+                                                onClick = {
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = song!!,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
                                                         )
-                                                    )
+                                                    }
                                                 }
-                                            },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menuState.show {
-                                                    SongMenu(
-                                                        originalSong = song!!,
-                                                        navController = navController,
-                                                        onDismiss = menuState::dismiss
-                                                    )
-                                                }
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.more_vert),
+                                                    contentDescription = null
+                                                )
                                             }
-                                        )
-                                )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (song!!.id == mediaMetadata?.id) {
+                                                        playerConnection.togglePlayPause()
+                                                    } else {
+                                                        playerConnection.playQueue(
+                                                            YouTubeQueue.radio(song!!.toMediaMetadata())
+                                                        )
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = song!!,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                    }
+                                                }
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        item(key = "quick_picks_list") {
+                            LazyHorizontalGrid(
+                                state = quickPicksLazyGridState,
+                                rows = GridCells.Fixed(4),
+                                flingBehavior = rememberSnapFlingBehavior(quickPicksSnapLayoutInfoProvider),
+                                contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(ListItemHeight * 4)
+                                    .animateItem()
+                            ) {
+                                items(
+                                    items = quickPicks.distinctBy { it.id },
+                                    key = { it.id }
+                                ) { originalSong ->
+                                    // fetch song from database to keep updated
+                                    val song by database.song(originalSong.id)
+                                        .collectAsState(initial = originalSong)
+
+                                    SongListItem(
+                                        song = song!!,
+                                        showInLibraryIcon = true,
+                                        isActive = song!!.id == mediaMetadata?.id,
+                                        isPlaying = isPlaying,
+                                        isSwipeable = false,
+                                        trailingContent = {
+                                            IconButton(
+                                                onClick = {
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = song!!,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.more_vert),
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .width(horizontalLazyGridItemWidth)
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (song!!.id == mediaMetadata?.id) {
+                                                        playerConnection.togglePlayPause()
+                                                    } else {
+                                                        playerConnection.playQueue(
+                                                            YouTubeQueue.radio(
+                                                                song!!.toMediaMetadata()
+                                                            )
+                                                        )
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = song!!,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                    }
+                                                }
+                                            )
+                                    )
+                                }
                             }
                         }
                     }
