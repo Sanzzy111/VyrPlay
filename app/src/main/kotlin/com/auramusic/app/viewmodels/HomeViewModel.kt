@@ -240,6 +240,14 @@ fun markWrappedAsSeen() {
             }
         }
     }
+
+    fun setHomeLayoutMode(mode: com.auramusic.app.constants.HomeLayoutMode) {
+        viewModelScope.launch(Dispatchers.IO) {
+            context.dataStore.edit { prefs ->
+                prefs[com.auramusic.app.constants.HomeLayoutModeKey] = mode.name
+            }
+        }
+    }
     private fun normalizedDataSyncId(dataSyncId: String?): String? = dataSyncId
         ?.takeIf { it.isNotBlank() && it != "null" }
         ?.let {

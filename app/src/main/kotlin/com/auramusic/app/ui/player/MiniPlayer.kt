@@ -90,6 +90,11 @@ import com.auramusic.app.constants.LiquidGlassBlurRadiusKey
 import com.auramusic.app.constants.LiquidGlassCornerRadiusKey
 import com.auramusic.app.constants.LiquidGlassOpacityKey
 import com.auramusic.app.constants.MiniPlayerHeight
+import com.auramusic.app.constants.MiniPlayerHeightKey
+import com.auramusic.app.constants.MiniPlayerCornerRadiusKey
+import com.auramusic.app.constants.MiniPlayerShowFavoriteKey
+import com.auramusic.app.constants.MiniPlayerShowSubscribeKey
+import com.auramusic.app.constants.MiniPlayerShowHardwareKey
 import com.auramusic.app.constants.PureBlackMiniPlayerKey
 import com.auramusic.app.constants.SwipeSensitivityKey
 import com.auramusic.app.constants.SwipeThumbnailKey
@@ -226,6 +231,13 @@ private fun NewMiniPlayer(
     val liquidGlassCornerRadius by rememberPreference(LiquidGlassCornerRadiusKey, defaultValue = 16f)
     val liquidGlassOpacity by rememberPreference(LiquidGlassOpacityKey, defaultValue = 0.15f)
 
+    // Mini player customization
+    val miniPlayerHeight by rememberPreference(MiniPlayerHeightKey, defaultValue = 64f)
+    val miniPlayerCornerRadius by rememberPreference(MiniPlayerCornerRadiusKey, defaultValue = 32f)
+    val showFavorite by rememberPreference(MiniPlayerShowFavoriteKey, defaultValue = true)
+    val showSubscribe by rememberPreference(MiniPlayerShowSubscribeKey, defaultValue = true)
+    val showHardware by rememberPreference(MiniPlayerShowHardwareKey, defaultValue = true)
+
     val backgroundColor = when {
         // Liquid glass effect - works in all theme modes including pure black
         liquidGlassEnabled -> {
@@ -317,11 +329,11 @@ private fun NewMiniPlayer(
         Box(
             modifier = Modifier
                 .then(if (isTabletLandscape) Modifier.width(500.dp).align(Alignment.Center) else Modifier.fillMaxWidth())
-                .height(64.dp)
+                .height(miniPlayerHeight.dp)
                 .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
-                .clip(RoundedCornerShape(32.dp))
+                .clip(RoundedCornerShape(miniPlayerCornerRadius.dp))
                 .background(color = backgroundColor)
-                .border(1.dp, outlineColor.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
+                .border(1.dp, outlineColor.copy(alpha = 0.3f), RoundedCornerShape(miniPlayerCornerRadius.dp))
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -364,21 +376,25 @@ private fun NewMiniPlayer(
                 }
 
                 // Hardware Integration Button - shows smart device ecosystem
-                HardwareIntegrationButton(
-                    onClick = onHardwareIntegrationClick
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Subscribe button - isolated composable
-                mediaMetadata?.artists?.firstOrNull()?.id?.let { artistId ->
-                    SubscribeButton(artistId = artistId, metadata = mediaMetadata!!)
+                if (showHardware) {
+                    HardwareIntegrationButton(
+                        onClick = onHardwareIntegrationClick
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                // Subscribe button - isolated composable
+                if (showSubscribe) {
+                    mediaMetadata?.artists?.firstOrNull()?.id?.let { artistId ->
+                        SubscribeButton(artistId = artistId, metadata = mediaMetadata!!)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
 
                 // Favorite button - isolated composable
-                mediaMetadata?.let { FavoriteButton(songId = it.id) }
+                if (showFavorite) {
+                    mediaMetadata?.let { FavoriteButton(songId = it.id) }
+                }
             }
         }
     }

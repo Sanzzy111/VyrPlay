@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
@@ -117,6 +118,8 @@ import com.auramusic.app.R
 import com.auramusic.app.constants.GridItemSize
 import com.auramusic.app.constants.GridItemsSizeKey
 import com.auramusic.app.constants.GridThumbnailHeight
+import com.auramusic.app.constants.HomeLayoutMode
+import com.auramusic.app.constants.HomeLayoutModeKey
 import com.auramusic.app.constants.InnerTubeCookieKey
 import com.auramusic.app.constants.ListItemHeight
 import com.auramusic.app.constants.ListThumbnailSize
@@ -158,6 +161,8 @@ import com.auramusic.app.ui.menu.YouTubeArtistMenu
 import com.auramusic.app.ui.menu.YouTubePlaylistMenu
 import com.auramusic.app.ui.menu.YouTubeSongMenu
 import com.auramusic.app.ui.utils.SnapLayoutInfoProvider
+import com.auramusic.app.ui.utils.liquidGlassFromPrefs
+import com.auramusic.app.constants.LiquidGlassApplyHomeCardsKey
 import com.auramusic.app.utils.makeTimeString
 import com.auramusic.app.utils.rememberEnumPreference
 import com.auramusic.app.utils.rememberPreference
@@ -220,6 +225,8 @@ fun HomeScreen(
     val accountImageUrl by viewModel.accountImageUrl.collectAsState()
     val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
 
+    val glassApplyHomeCards by rememberPreference(LiquidGlassApplyHomeCardsKey, defaultValue = false)
+
     val shouldShowWrappedCard by viewModel.showWrappedCard.collectAsState()
     val wrappedState by viewModel.wrappedManager.state.collectAsState()
     val isWrappedDataReady = wrappedState.isDataReady
@@ -232,6 +239,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val lazylistState = rememberLazyListState()
     val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
+    val homeLayoutMode by rememberEnumPreference(HomeLayoutModeKey, defaultValue = HomeLayoutMode.GRID)
     val currentGridHeight = if (gridItemSize == GridItemSize.BIG) GridThumbnailHeight else SmallGridThumbnailHeight
     val backStackEntry by navController.currentBackStackEntryAsState()
     val scrollToTop =
@@ -358,6 +366,65 @@ fun HomeScreen(
         }
     }
 
+    val localListItem: @Composable (LocalItem) -> Unit = {
+        when (it) {
+            is Song -> SongListItem(
+                song = it,
+                isActive = it.id == mediaMetadata?.id,
+                isPlaying = isPlaying,
+                isSwipeable = false,
+                trailingContent = {
+                    IconButton(
+                        onClick = {
+                            menuState.show {
+                                SongMenu(
+                                    originalSong = it,
+                                    navController = navController,
+                                    onDismiss = menuState::dismiss
+                                )
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_vert),
+                            contentDescription = null
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = {
+                            if (it.id == mediaMetadata?.id) {
+                                playerConnection.togglePlayPause()
+                            } else {
+                                playerConnection.playQueue(
+                                    YouTubeQueue.radio(it.toMediaMetadata()),
+                                )
+                            }
+                        },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                SongMenu(
+                                    originalSong = it,
+                                    navController = navController,
+                                    onDismiss = menuState::dismiss,
+                                )
+                            }
+                        }
+                    )
+            )
+            is Album -> {
+                navController.navigate("album/${it.id}")
+            }
+            is Artist -> {
+                navController.navigate("artist/${it.id}")
+            }
+            is Playlist -> {}
+        }
+    }
+
     val ytGridItem: @Composable (YTItem) -> Unit = { item ->
         YouTubeGridItem(
             item = item,
@@ -469,13 +536,35 @@ fun HomeScreen(
             contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
         ) {
             item {
-                ChipsRow(
-                    chips = homePage?.chips?.map { it to it.title } ?: emptyList(),
-                    currentValue = selectedChip,
-                    onValueUpdate = {
-                        viewModel.toggleChip(it)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ChipsRow(
+                        chips = homePage?.chips?.map { it to it.title } ?: emptyList(),
+                        currentValue = selectedChip,
+                        onValueUpdate = {
+                            viewModel.toggleChip(it)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = {
+                            val newMode = homeLayoutMode.toggle()
+                            viewModel.setHomeLayoutMode(newMode)
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (homeLayoutMode == HomeLayoutMode.GRID) R.drawable.grid_view else R.drawable.list
+                            ),
+                            contentDescription = stringResource(
+                                if (homeLayoutMode == HomeLayoutMode.GRID) R.string.home_layout_grid else R.string.home_layout_list
+                            ),
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
-                )
+                }
             }
 
             // Refresh indicator between chips and content
@@ -506,6 +595,9 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .let { mod ->
+                                if (glassApplyHomeCards) mod.liquidGlassFromPrefs() else mod
+                            }
                             .combinedClickable(
                                 onClick = {
                                     navController.navigate("listen_together")
@@ -559,6 +651,9 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .let { mod ->
+                                    if (glassApplyHomeCards) mod.liquidGlassFromPrefs() else mod
+                                }
                                 .combinedClickable(
                                     onClick = {
                                         playerConnection.playQueue(
@@ -631,7 +726,10 @@ fun HomeScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(16.dp)
+                                .let { mod ->
+                                    if (glassApplyHomeCards) mod.liquidGlassFromPrefs() else mod
+                                },
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             ),
@@ -1068,23 +1166,37 @@ item(key = "speed_dial_shuffle") {
                         )
                     }
 
-                    item(key = "keep_listening_list") {
-                        val rows = if (keepListening.size > 6) 2 else 1
-                        LazyHorizontalGrid(
-                            state = rememberLazyGridState(),
-                            rows = GridCells.Fixed(rows),
-                            contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-                                .asPaddingValues(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height((currentGridHeight + with(LocalDensity.current) {
-                                    MaterialTheme.typography.bodyLarge.lineHeight.toDp() * 2 +
-                                            MaterialTheme.typography.bodyMedium.lineHeight.toDp() * 2
-                                }) * rows)
-                                .animateItem()
-                        ) {
-                            items(keepListening, key = { it.id }) {
-                                localGridItem(it)
+                    if (homeLayoutMode == HomeLayoutMode.LIST) {
+                        item(key = "keep_listening_list") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateItem()
+                            ) {
+                                keepListening.take(10).forEach { item ->
+                                    localListItem(item)
+                                }
+                            }
+                        }
+                    } else {
+                        item(key = "keep_listening_list") {
+                            val rows = if (keepListening.size > 6) 2 else 1
+                            LazyHorizontalGrid(
+                                state = rememberLazyGridState(),
+                                rows = GridCells.Fixed(rows),
+                                contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((currentGridHeight + with(LocalDensity.current) {
+                                        MaterialTheme.typography.bodyLarge.lineHeight.toDp() * 2 +
+                                                MaterialTheme.typography.bodyMedium.lineHeight.toDp() * 2
+                                    }) * rows)
+                                    .animateItem()
+                            ) {
+                                items(keepListening, key = { it.id }) {
+                                    localGridItem(it)
+                                }
                             }
                         }
                     }

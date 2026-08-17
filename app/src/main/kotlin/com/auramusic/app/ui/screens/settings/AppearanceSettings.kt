@@ -86,6 +86,16 @@ import com.auramusic.app.constants.LiquidGlassEffectKey
 import com.auramusic.app.constants.LiquidGlassBlurRadiusKey
 import com.auramusic.app.constants.LiquidGlassCornerRadiusKey
 import com.auramusic.app.constants.LiquidGlassOpacityKey
+import com.auramusic.app.constants.LiquidGlassApplyHomeCardsKey
+import com.auramusic.app.constants.LiquidGlassApplyPlayerKey
+import com.auramusic.app.constants.LiquidGlassApplyNavBarKey
+import com.auramusic.app.constants.HomeLayoutMode
+import com.auramusic.app.constants.HomeLayoutModeKey
+import com.auramusic.app.constants.MiniPlayerHeightKey
+import com.auramusic.app.constants.MiniPlayerCornerRadiusKey
+import com.auramusic.app.constants.MiniPlayerShowFavoriteKey
+import com.auramusic.app.constants.MiniPlayerShowSubscribeKey
+import com.auramusic.app.constants.MiniPlayerShowHardwareKey
 import com.auramusic.app.constants.LyricsLineSpacingKey
 import com.auramusic.app.constants.LyricsScrollKey
 import com.auramusic.app.constants.LyricsTextPositionKey
@@ -227,6 +237,42 @@ fun AppearanceSettings(
     val (liquidGlassOpacity, onLiquidGlassOpacityChange) = rememberPreference(
         LiquidGlassOpacityKey,
         defaultValue = 0.15f
+    )
+    val (liquidGlassApplyHomeCards, onLiquidGlassApplyHomeCardsChange) = rememberPreference(
+        LiquidGlassApplyHomeCardsKey,
+        defaultValue = false
+    )
+    val (liquidGlassApplyPlayer, onLiquidGlassApplyPlayerChange) = rememberPreference(
+        LiquidGlassApplyPlayerKey,
+        defaultValue = false
+    )
+    val (liquidGlassApplyNavBar, onLiquidGlassApplyNavBarChange) = rememberPreference(
+        LiquidGlassApplyNavBarKey,
+        defaultValue = false
+    )
+    val (homeLayoutMode, onHomeLayoutModeChange) = rememberEnumPreference(
+        HomeLayoutModeKey,
+        defaultValue = HomeLayoutMode.GRID
+    )
+    val (miniPlayerHeight, onMiniPlayerHeightChange) = rememberPreference(
+        MiniPlayerHeightKey,
+        defaultValue = 64f
+    )
+    val (miniPlayerCornerRadius, onMiniPlayerCornerRadiusChange) = rememberPreference(
+        MiniPlayerCornerRadiusKey,
+        defaultValue = 32f
+    )
+    val (miniPlayerShowFavorite, onMiniPlayerShowFavoriteChange) = rememberPreference(
+        MiniPlayerShowFavoriteKey,
+        defaultValue = true
+    )
+    val (miniPlayerShowSubscribe, onMiniPlayerShowSubscribeChange) = rememberPreference(
+        MiniPlayerShowSubscribeKey,
+        defaultValue = true
+    )
+    val (miniPlayerShowHardware, onMiniPlayerShowHardwareChange) = rememberPreference(
+        MiniPlayerShowHardwareKey,
+        defaultValue = true
     )
     val (lyricsTextSize, onLyricsTextSizeChange) = rememberPreference(LyricsTextSizeKey, defaultValue = 24f)
     val (lyricsLineSpacing, onLyricsLineSpacingChange) = rememberPreference(LyricsLineSpacingKey, defaultValue = 1.3f)
@@ -671,6 +717,142 @@ fun AppearanceSettings(
         mutableStateOf(false)
     }
 
+    var showMiniPlayerHeightDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var showMiniPlayerCornerRadiusDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showMiniPlayerHeightDialog) {
+        var tempHeight by remember { mutableFloatStateOf(miniPlayerHeight) }
+
+        DefaultDialog(
+            onDismiss = {
+                tempHeight = miniPlayerHeight
+                showMiniPlayerHeightDialog = false
+            },
+            buttons = {
+                TextButton(
+                    onClick = {
+                        tempHeight = 64f
+                    }
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                TextButton(
+                    onClick = {
+                        tempHeight = miniPlayerHeight
+                        showMiniPlayerHeightDialog = false
+                    }
+                ) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+                TextButton(
+                    onClick = {
+                        onMiniPlayerHeightChange(tempHeight)
+                        showMiniPlayerHeightDialog = false
+                    }
+                ) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            }
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.mini_player_height),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Text(
+                    text = "${tempHeight.roundToInt()} dp",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Slider(
+                    value = tempHeight,
+                    onValueChange = { tempHeight = it },
+                    valueRange = 48f..96f,
+                    steps = 11,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+
+    if (showMiniPlayerCornerRadiusDialog) {
+        var tempCornerRadius by remember { mutableFloatStateOf(miniPlayerCornerRadius) }
+
+        DefaultDialog(
+            onDismiss = {
+                tempCornerRadius = miniPlayerCornerRadius
+                showMiniPlayerCornerRadiusDialog = false
+            },
+            buttons = {
+                TextButton(
+                    onClick = {
+                        tempCornerRadius = 32f
+                    }
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                TextButton(
+                    onClick = {
+                        tempCornerRadius = miniPlayerCornerRadius
+                        showMiniPlayerCornerRadiusDialog = false
+                    }
+                ) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+                TextButton(
+                    onClick = {
+                        onMiniPlayerCornerRadiusChange(tempCornerRadius)
+                        showMiniPlayerCornerRadiusDialog = false
+                    }
+                ) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            }
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.mini_player_corner_radius),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Text(
+                    text = "${tempCornerRadius.roundToInt()} dp",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Slider(
+                    value = tempCornerRadius,
+                    onValueChange = { tempCornerRadius = it },
+                    valueRange = 0f..48f,
+                    steps = 15,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+
     if (showGridSizeDialog) {
         EnumDialog(
             onDismiss = { showGridSizeDialog = false },
@@ -1090,6 +1272,88 @@ fun AppearanceSettings(
                         onClick = { onPureBlackMiniPlayerChange(!pureBlackMiniPlayer) }
                     )
                 )
+                add(
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.sliders),
+                        title = { Text(stringResource(R.string.mini_player_height)) },
+                        description = { Text("${miniPlayerHeight.roundToInt()} dp") },
+                        onClick = { showMiniPlayerHeightDialog = true }
+                    )
+                )
+                add(
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.rounded_corner),
+                        title = { Text(stringResource(R.string.mini_player_corner_radius)) },
+                        description = { Text("${miniPlayerCornerRadius.roundToInt()} dp") },
+                        onClick = { showMiniPlayerCornerRadiusDialog = true }
+                    )
+                )
+                add(
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.favorite),
+                        title = { Text(stringResource(R.string.mini_player_show_favorite)) },
+                        trailingContent = {
+                            Switch(
+                                checked = miniPlayerShowFavorite,
+                                onCheckedChange = onMiniPlayerShowFavoriteChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (miniPlayerShowFavorite) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onMiniPlayerShowFavoriteChange(!miniPlayerShowFavorite) }
+                    )
+                )
+                add(
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.subscribe),
+                        title = { Text(stringResource(R.string.mini_player_show_subscribe)) },
+                        trailingContent = {
+                            Switch(
+                                checked = miniPlayerShowSubscribe,
+                                onCheckedChange = onMiniPlayerShowSubscribeChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (miniPlayerShowSubscribe) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onMiniPlayerShowSubscribeChange(!miniPlayerShowSubscribe) }
+                    )
+                )
+                add(
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.speaker_group),
+                        title = { Text(stringResource(R.string.mini_player_show_hardware)) },
+                        trailingContent = {
+                            Switch(
+                                checked = miniPlayerShowHardware,
+                                onCheckedChange = onMiniPlayerShowHardwareChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (miniPlayerShowHardware) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onMiniPlayerShowHardwareChange(!miniPlayerShowHardware) }
+                    )
+                )
             }
         )
 
@@ -1191,6 +1455,75 @@ fun AppearanceSettings(
                                 }
                             },
                             onClick = {}
+                        )
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.grid_view),
+                            title = { Text(stringResource(R.string.liquid_glass_apply_home_cards)) },
+                            description = { Text(stringResource(R.string.liquid_glass_apply_home_cards_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = liquidGlassApplyHomeCards,
+                                    onCheckedChange = onLiquidGlassApplyHomeCardsChange,
+                                    thumbContent = {
+                                        if (liquidGlassApplyHomeCards) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.check),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                            onClick = { onLiquidGlassApplyHomeCardsChange(!liquidGlassApplyHomeCards) }
+                        )
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.play),
+                            title = { Text(stringResource(R.string.liquid_glass_apply_player)) },
+                            description = { Text(stringResource(R.string.liquid_glass_apply_player_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = liquidGlassApplyPlayer,
+                                    onCheckedChange = onLiquidGlassApplyPlayerChange,
+                                    thumbContent = {
+                                        if (liquidGlassApplyPlayer) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.check),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                            onClick = { onLiquidGlassApplyPlayerChange(!liquidGlassApplyPlayer) }
+                        )
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.nav_bar),
+                            title = { Text(stringResource(R.string.liquid_glass_apply_nav_bar)) },
+                            description = { Text(stringResource(R.string.liquid_glass_apply_nav_bar_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = liquidGlassApplyNavBar,
+                                    onCheckedChange = onLiquidGlassApplyNavBarChange,
+                                    thumbContent = {
+                                        if (liquidGlassApplyNavBar) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.check),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                            onClick = { onLiquidGlassApplyNavBarChange(!liquidGlassApplyNavBar) }
                         )
                     )
                 }
@@ -1636,6 +1969,19 @@ fun AppearanceSettings(
         Material3SettingsGroup(
             title = stringResource(R.string.misc),
             items = listOf(
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.grid_view),
+                    title = { Text(stringResource(R.string.home_layout_mode)) },
+                    description = {
+                        Text(
+                            when (homeLayoutMode) {
+                                HomeLayoutMode.LIST -> stringResource(R.string.home_layout_list)
+                                HomeLayoutMode.GRID -> stringResource(R.string.home_layout_grid)
+                            }
+                        )
+                    },
+                    onClick = { onHomeLayoutModeChange(homeLayoutMode.toggle()) }
+                ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.nav_bar),
                     title = { Text(stringResource(R.string.default_open_tab)) },

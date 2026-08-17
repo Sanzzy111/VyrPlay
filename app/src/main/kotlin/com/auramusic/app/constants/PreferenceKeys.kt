@@ -463,6 +463,29 @@ val LiquidGlassEffectKey = booleanPreferencesKey("liquidGlassEffect")
 val LiquidGlassBlurRadiusKey = floatPreferencesKey("liquidGlassBlurRadius")
 val LiquidGlassCornerRadiusKey = floatPreferencesKey("liquidGlassCornerRadius")
 val LiquidGlassOpacityKey = floatPreferencesKey("liquidGlassOpacity")
+val LiquidGlassApplyHomeCardsKey = booleanPreferencesKey("liquidGlassApplyHomeCards")
+val LiquidGlassApplyPlayerKey = booleanPreferencesKey("liquidGlassApplyPlayer")
+val LiquidGlassApplyNavBarKey = booleanPreferencesKey("liquidGlassApplyNavBar")
+
+// Home layout
+enum class HomeLayoutMode {
+    LIST,
+    GRID;
+
+    fun toggle() = when (this) {
+        LIST -> GRID
+        GRID -> LIST
+    }
+}
+
+val HomeLayoutModeKey = stringPreferencesKey("homeLayoutMode")
+
+// Mini player customization
+val MiniPlayerHeightKey = floatPreferencesKey("miniPlayerHeight")
+val MiniPlayerCornerRadiusKey = floatPreferencesKey("miniPlayerCornerRadius")
+val MiniPlayerShowFavoriteKey = booleanPreferencesKey("miniPlayerShowFavorite")
+val MiniPlayerShowSubscribeKey = booleanPreferencesKey("miniPlayerShowSubscribe")
+val MiniPlayerShowHardwareKey = booleanPreferencesKey("miniPlayerShowHardware")
 
 val LyricsAnimationStyleKey = stringPreferencesKey("lyricsAnimationStyle")
 enum class LyricsAnimationStyle {
