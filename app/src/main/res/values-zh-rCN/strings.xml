@@ -46,9 +46,9 @@
     <string name="enable_discord_rpc">A. 任 权</string>
     <string name="discord_use_details">使用细节</string>
     <string name="discord_use_details_description">1. 记录中现有歌曲</string>
-    <string name="listening_to_metrolist">Aura Music</string>
+    <string name="listening_to_auramusic">Aura Music</string>
     <string name="listen_on_youtube_music">Listen onube 音乐</string>
-    <string name="visit_metrolist">Aura Music</string>
+    <string name="visit_auramusic">Aura Music</string>
     <string name="lastfm_integration">最后,fm 融合</string>
     <string name="username">用户名</string>
     <string name="password">密码</string>

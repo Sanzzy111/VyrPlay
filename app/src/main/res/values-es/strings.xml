@@ -476,7 +476,7 @@
     <string name="options">Opciones</string>
     <string name="discord_use_details">Uso de detalles de campo</string>
     <string name="discord_use_details_description">Mostrar la canción actual en los detalles de disco</string>
-    <string name="listening_to_metrolist">Escuchando AuraMusic</string>
+    <string name="listening_to_auramusic">Escuchando AuraMusic</string>
     <string name="listen_on_youtube_music">Escucha en YouTube Music</string>
     <string name="lastfm_integration">Integración con Last.fm</string>
     <string name="username">Nombre de usuario</string>
@@ -813,7 +813,7 @@
     <string name="discord_information">AuraMusic utiliza la biblioteca KizzyRPC para establecer el estado de su cuenta de discordia. Esto implica el uso de la conexión de discordia Gateway, que puede considerarse una violación de los TOS de discordia. Sin embargo, no hay casos conocidos de que se suspendan cuentas de usuario por esta razón. Usar a su propio riesgo.\nAuraMusic sólo extraerá su token, y todo lo demás se almacena localmente.</string>
     <string name="preview">Avance</string>
     <string name="enable_discord_rpc">Activar la presencia rica</string>
-    <string name="visit_metrolist">Visitar AuraMusic</string>
+    <string name="visit_auramusic">Visitar AuraMusic</string>
     <string name="enable_scrobbling">Habilitar acrobbling</string>
     <string name="lastfm_now_playing">Last.fm ahora jugando</string>
     <string name="last_fm_send_likes">Enviar gustos</string>

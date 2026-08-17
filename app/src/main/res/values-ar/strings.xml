@@ -678,9 +678,9 @@
     <string name="enable_discord_rpc">Enable Rich Presence</string>
     <string name="discord_use_details">تفاصيل الاستخدام</string>
     <string name="discord_use_details_description">أعرض الأغنية الحالية على التفاصيل</string>
-    <string name="listening_to_metrolist">الاستماع إلى AuraMusic</string>
+    <string name="listening_to_auramusic">الاستماع إلى AuraMusic</string>
     <string name="listen_on_youtube_music">استمع إلى موسيقى اليوتيوب</string>
-    <string name="visit_metrolist">Visit AuraMusic</string>
+    <string name="visit_auramusic">Visit AuraMusic</string>
     <string name="lastfm_integration">الاندماج الأخير</string>
     <string name="username">المستعمل</string>
     <string name="password">كلمة السر</string>

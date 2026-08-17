@@ -62,8 +62,11 @@ import coil3.compose.AsyncImage
 import com.auramusic.app.LocalPlayerAwareWindowInsets
 import com.auramusic.app.LocalPlayerConnection
 import com.auramusic.app.R
+import com.auramusic.app.constants.DiscordAvatarUrlKey
 import com.auramusic.app.constants.DiscordInfoDismissedKey
+import com.auramusic.app.constants.DiscordNameKey
 import com.auramusic.app.constants.DiscordUseDetailsKey
+import com.auramusic.app.constants.DiscordUsernameKey
 import com.auramusic.app.constants.EnableDiscordRPCKey
 import com.auramusic.app.db.entities.Song
 import com.auramusic.app.discord.DiscordRpcManager
@@ -95,6 +98,12 @@ fun DiscordSettings(
 
     var infoDismissed by rememberPreference(DiscordInfoDismissedKey, false)
 
+    // Persisted fallback for the fetched Discord profile so the account info
+    // survives transient fetch failures or gateway reconnects.
+    var discordUsername by rememberPreference(DiscordUsernameKey, "")
+    var discordName by rememberPreference(DiscordNameKey, "")
+    var discordAvatar by rememberPreference(DiscordAvatarUrlKey, "")
+
     // Ensure the Discord manager is initialized so a persisted session is
     // rehydrated and account info becomes available on this screen.
     LaunchedEffect(Unit) {
@@ -104,6 +113,14 @@ fun DiscordSettings(
     val discordUser by DiscordRpcManager.currentUser.collectAsState()
     val accessToken by DiscordRpcManager.accessTokenFlow.collectAsState()
     val connectionStatus by DiscordRpcManager.connectionStatus.collectAsState()
+
+    LaunchedEffect(discordUser) {
+        if (discordUser != null) {
+            discordUsername = discordUser!!.username
+            discordName = discordUser!!.name
+            discordAvatar = discordUser!!.avatar ?: ""
+        }
+    }
 
     LaunchedEffect(playbackState) {
         if (playbackState == STATE_READY) {
@@ -127,11 +144,15 @@ fun DiscordSettings(
     val isLoggedIn = accessToken != null
     val isAuthorizing = connectionStatus == DiscordRpcManager.Status.Authorizing
 
+    val displayName = discordUser?.name?.takeIf { it.isNotBlank() } ?: discordName
+    val displayUsername = discordUser?.username?.takeIf { it.isNotBlank() } ?: discordUsername
+    val displayAvatar = discordUser?.avatar ?: discordAvatar.ifBlank { null }
+
     val accountTitle = when {
         isAuthorizing && !isLoggedIn -> "Connecting…"
         !isLoggedIn -> stringResource(R.string.not_logged_in)
-        discordUser?.name?.isNotBlank() == true -> discordUser!!.name
-        discordUser?.username?.isNotBlank() == true -> discordUser!!.username
+        displayName.isNotBlank() -> displayName
+        displayUsername.isNotBlank() -> displayUsername
         else -> stringResource(R.string.discord_integration)
     }
 
@@ -199,13 +220,13 @@ fun DiscordSettings(
                 )
             },
             description =
-            if (discordUser?.username?.isNotBlank() == true) {
-                "@${discordUser!!.username}"
+            if (displayUsername.isNotBlank()) {
+                "@$displayUsername"
             } else {
                 null
             },
             icon = {
-                val avatar = discordUser?.avatar
+                val avatar = displayAvatar
                 if (isLoggedIn && !avatar.isNullOrBlank()) {
                     AsyncImage(
                         model = avatar,
@@ -221,6 +242,9 @@ fun DiscordSettings(
             trailingContent = {
                 if (isLoggedIn) {
                     OutlinedButton(onClick = {
+                        discordUsername = ""
+                        discordName = ""
+                        discordAvatar = ""
                         DiscordRpcManager.logout()
                     }) {
                         Text(stringResource(R.string.action_logout))
@@ -300,7 +324,7 @@ fun RichPresence(song: Song?, currentPlaybackTimeMillis: Long = 0L) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = stringResource(R.string.listening_to_metrolist),
+                text = stringResource(R.string.listening_to_auramusic),
                 style = MaterialTheme.typography.labelLarge,
                 textAlign = TextAlign.Start,
                 fontWeight = FontWeight.ExtraBold,
@@ -428,7 +452,7 @@ fun RichPresence(song: Song?, currentPlaybackTimeMillis: Long = 0L) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.visit_metrolist))
+                Text(stringResource(R.string.visit_auramusic))
             }
         }
     }

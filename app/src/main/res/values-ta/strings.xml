@@ -635,9 +635,9 @@
     <string name="enable_discord_rpc">பணக்கார இருப்பை இயக்கவும்</string>
     <string name="discord_use_details">விவரங்கள் புலத்தைப் பயன்படுத்தவும்</string>
     <string name="discord_use_details_description">டிச்கார்ட் விவரங்களில் தற்போதைய பாடலைக் காட்டு</string>
-    <string name="listening_to_metrolist">ஆரா மியூசிக்கைக் கேட்பது</string>
+    <string name="listening_to_auramusic">ஆரா மியூசிக்கைக் கேட்பது</string>
     <string name="listen_on_youtube_music">YouTube Musicல் கேளுங்கள்</string>
-    <string name="visit_metrolist">AuraMusic ஐப் பார்வையிடவும்</string>
+    <string name="visit_auramusic">AuraMusic ஐப் பார்வையிடவும்</string>
     <string name="lastfm_integration">Last.fm ஒருங்கிணைப்பு</string>
     <string name="username">பயனர் பெயர்</string>
     <string name="password">கடவுச்சொல்</string>

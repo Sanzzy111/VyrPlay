@@ -13,7 +13,7 @@ object DiscordDefaults {
     const val DETAILS_TEMPLATE = "{song.name}"
 
     const val ACTIVITY_TYPE = "2"
-    const val ACTIVITY_NAME = ""
+    const val ACTIVITY_NAME = "AuraMusic"
 
     const val USER_STATUS = "online"
     const val STATUS_IDLE = "idle"
@@ -30,5 +30,5 @@ object DiscordDefaults {
     const val DISCORD_OAUTH_AUTHORIZE = "https://discord.com/oauth2/authorize"
     const val DISCORD_OAUTH_TOKEN = "https://discord.com/api/v10/oauth2/token"
 
-    const val DISCORD_SCOPES = "identify"
+    const val DISCORD_SCOPES = "openid sdk.social_layer_presence"
 }

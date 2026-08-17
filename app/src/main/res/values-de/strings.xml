@@ -612,9 +612,9 @@
     <string name="enable_discord_rpc">Reiche Präsenz aktivieren</string>
     <string name="discord_use_details">Feld Details verwenden</string>
     <string name="discord_use_details_description">Aktuelles Lied in Discord Details anzeigen</string>
-    <string name="listening_to_metrolist">AuraMusic zuhören</string>
+    <string name="listening_to_auramusic">AuraMusic zuhören</string>
     <string name="listen_on_youtube_music">Auf YouTube Musik hören</string>
-    <string name="visit_metrolist">AuraMusic besuchen</string>
+    <string name="visit_auramusic">AuraMusic besuchen</string>
     <string name="lastfm_integration">Letzter Beitrag</string>
     <string name="username">Benutzername</string>
     <string name="password">Passwort vergessen</string>

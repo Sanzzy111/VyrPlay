@@ -609,8 +609,8 @@
     <string name="enable_discord_rpc">Activer la présence enrichie</string>
     <string name="discord_use_details">Utiliser le champ de détails</string>
     <string name="discord_use_details_description">Affichez le titre en cours dans les détails Discord</string>
-    <string name="listening_to_metrolist">Écoutez sur AuraMusic</string>
-    <string name="visit_metrolist">Rendez-vous sur AuraMusic</string>
+    <string name="listening_to_auramusic">Écoutez sur AuraMusic</string>
+    <string name="visit_auramusic">Rendez-vous sur AuraMusic</string>
     <string name="play_on_app">Écouter sur AuraMusic</string>
     <string name="wrapped_logo_content_description">Récapitulatif AuraMusic</string>
     <string name="wrapped_special_thanks">Un grand merci à vous pour votre soutien à AuraMusic !</string>

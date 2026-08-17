@@ -535,9 +535,9 @@
     <string name="enable_discord_rpc">Ativar Rich Presence</string>
     <string name="discord_use_details">Usar campo de pormenores</string>
     <string name="discord_use_details_description">Mostrar música atual nos pormenores do Discord</string>
-    <string name="listening_to_metrolist">A ouvir AuraMusic</string>
+    <string name="listening_to_auramusic">A ouvir AuraMusic</string>
     <string name="listen_on_youtube_music">Ouvir no YouTube Music</string>
-    <string name="visit_metrolist">Visitar AuraMusic</string>
+    <string name="visit_auramusic">Visitar AuraMusic</string>
     <string name="lastfm_integration">Integração Last.fm</string>
     <string name="username">Nome de utilizador</string>
     <string name="password">Palavra-passe</string>
