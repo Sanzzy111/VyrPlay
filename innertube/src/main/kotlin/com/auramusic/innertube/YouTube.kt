@@ -1120,7 +1120,10 @@ object YouTube {
             return@runCatching next(watchPlaylistEndpoint).getOrThrow().let { result ->
                 result.copy(
                     title = title,
-                    items = songs + result.items,
+                    // The automix playlist is a full radio: it repeats the seed song and
+                    // usually several songs already present in the watch-next queue. Keep the
+                    // first occurrence so the queue doesn't show the same track repeatedly.
+                    items = (songs + result.items).distinctBy { it.id },
                     lyricsEndpoint = response.contents.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs?.getOrNull(1)?.tabRenderer?.endpoint?.browseEndpoint,
                     relatedEndpoint = response.contents.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs?.getOrNull(2)?.tabRenderer?.endpoint?.browseEndpoint,
                     currentIndex = currentIndex,

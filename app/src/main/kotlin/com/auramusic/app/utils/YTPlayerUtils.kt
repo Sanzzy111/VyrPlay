@@ -13,6 +13,7 @@ import com.auramusic.innertube.PoTokenProvider
 import com.auramusic.innertube.YouTube
 import com.auramusic.innertube.models.YouTubeClient
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID
+import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_NO_SDK
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
 import com.auramusic.innertube.models.YouTubeClient.Companion.IPADOS
 import com.auramusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
@@ -70,55 +71,65 @@ object YTPlayerUtils {
         }
 
         val mainPlayerResponse =
-            YouTube.player(videoId, playlistId, MAIN_CLIENT, poToken = mainClientPoToken).getOrThrow()
-        val audioConfig = mainPlayerResponse.playerConfig?.audioConfig
-        val videoDetails = mainPlayerResponse.videoDetails
-        val playbackTracking = mainPlayerResponse.playbackTracking
+            YouTube.player(videoId, playlistId, MAIN_CLIENT, poToken = mainClientPoToken).getOrNull()
+        val audioConfig = mainPlayerResponse?.playerConfig?.audioConfig
+        val videoDetails = mainPlayerResponse?.videoDetails
+        val playbackTracking = mainPlayerResponse?.playbackTracking
 
-        buildPlaybackData(
-            videoId = videoId,
-            response = mainPlayerResponse,
-            audioQuality = audioQuality,
-            connectivityManager = connectivityManager,
-            poTokenProvider = poTokenProvider,
-            audioConfig = audioConfig,
-            videoDetails = videoDetails,
-            playbackTracking = playbackTracking,
-            clientName = MAIN_CLIENT.clientName,
-        ) ?: run {
-            Timber.tag(logTag).d("MAIN_CLIENT did not produce a usable stream; trying fallbacks")
-            var fallbackFailure: String? = null
-            for (client in STREAM_FALLBACK_CLIENTS) {
-                if (client.loginRequired && !isLoggedIn) {
-                    Timber.tag(logTag).d("Skipping client ${client.clientName} - requires login but user is not logged in")
-                    continue
-                }
+        // Order in which clients are used to build a usable stream URL:
+        // - Logged out: MAIN_CLIENT first (works reliably without a session).
+        // - Logged in: YouTube bot-checks the login-bound WEB_REMIX stream URLs
+        //   and serves them only after an attestation check that fails for
+        //   non-browser clients, so resolution "succeeds" but the actual fetch
+        //   dies with IO_UNSPECIFIED (2000). Prefer the non-auth guest clients
+        //   first in that case so playback keeps working; keep MAIN_CLIENT for
+        //   metadata (loudness / history tracking) and as a last resort for
+        //   age-restricted content that genuinely needs a session.
+        val streamClients: Array<YouTubeClient> = (if (isLoggedIn) {
+            arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID) +
+                arrayOf(MAIN_CLIENT) + STREAM_FALLBACK_CLIENTS
+        } else {
+            arrayOf(MAIN_CLIENT) + STREAM_FALLBACK_CLIENTS
+        }).distinct().toTypedArray()
 
-                val fallbackPoToken = poTokenProvider?.getPlayerPoToken(videoId)
-                val fallbackResponse = YouTube.player(videoId, playlistId, client, poToken = fallbackPoToken)
+        var fallbackFailure: String? = null
+        for (client in streamClients) {
+            if (client.loginRequired && !isLoggedIn) {
+                Timber.tag(logTag).d("Skipping client ${client.clientName} - requires login but user is not logged in")
+                continue
+            }
+
+            val response = if (client == MAIN_CLIENT && mainPlayerResponse != null) {
+                mainPlayerResponse
+            } else {
+                val clientPoToken = poTokenProvider?.getPlayerPoToken(videoId)
+                YouTube.player(videoId, playlistId, client, poToken = clientPoToken)
                     .getOrNull()
-                    ?: continue
-                fallbackFailure = fallbackResponse.playabilityStatus.reason
-
-                buildPlaybackData(
-                    videoId = videoId,
-                    response = fallbackResponse,
-                    audioQuality = audioQuality,
-                    connectivityManager = connectivityManager,
-                    poTokenProvider = poTokenProvider,
-                    audioConfig = audioConfig,
-                    videoDetails = videoDetails,
-                    playbackTracking = playbackTracking,
-                    clientName = client.clientName,
-                )?.let { return@runCatching it }
+                    ?: run {
+                        Timber.tag(logTag).d("Skipping client ${client.clientName} - player response failed")
+                        continue
+                    }
             }
+            fallbackFailure = response.playabilityStatus.reason
 
-            val errorReason = fallbackFailure ?: mainPlayerResponse.playabilityStatus.reason
-            if (mainPlayerResponse.playabilityStatus.status != "OK" && errorReason != null) {
-                throw PlaybackException(errorReason, null, PlaybackException.ERROR_CODE_REMOTE_ERROR)
-            }
-            throw Exception("Could not find stream url")
+            buildPlaybackData(
+                videoId = videoId,
+                response = response,
+                audioQuality = audioQuality,
+                connectivityManager = connectivityManager,
+                poTokenProvider = poTokenProvider,
+                audioConfig = audioConfig,
+                videoDetails = videoDetails,
+                playbackTracking = playbackTracking,
+                clientName = client.clientName,
+            )?.let { return@runCatching it }
         }
+
+        val errorReason = fallbackFailure ?: mainPlayerResponse?.playabilityStatus?.reason
+        if (mainPlayerResponse?.playabilityStatus?.status != "OK" && errorReason != null) {
+            throw PlaybackException(errorReason, null, PlaybackException.ERROR_CODE_REMOTE_ERROR)
+        }
+        throw Exception("Could not find stream url")
     }
 
     private suspend fun buildPlaybackData(
@@ -216,15 +227,16 @@ return format
 
         val signatureTimestamp = getSignatureTimestampOrNull(videoId)
         val poToken = poTokenProvider?.getPlayerPoToken(videoId)
-        val mainPlayerResponse = YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp, poToken).getOrThrow()
+        val mainPlayerResponse = YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp, poToken).getOrNull()
+        val isLoggedIn = YouTube.cookie != null
 
         // Try muxed formats first (contain both video and audio in one stream)
-        val muxedFormats = mainPlayerResponse.streamingData?.formats ?: emptyList()
+        val muxedFormats = mainPlayerResponse?.streamingData?.formats ?: emptyList()
         val muxedFormat = muxedFormats
             .filter { it.isVideo }
             .maxByOrNull { it.bitrate }
 
-        if (muxedFormat != null) {
+        if (muxedFormat != null && mainPlayerResponse != null) {
             val url = findUrlOrNull(muxedFormat, videoId, mainPlayerResponse)
                 ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
             if (url != null) {
@@ -234,17 +246,34 @@ return format
         }
 
         // Fallback: video-only adaptive format (will have NO audio)
-        val adaptiveFormats = mainPlayerResponse.streamingData?.adaptiveFormats ?: emptyList()
+        val adaptiveFormats = mainPlayerResponse?.streamingData?.adaptiveFormats ?: emptyList()
         val videoOnlyFormat = adaptiveFormats
             .filter { it.isVideo }
             .maxByOrNull { it.bitrate }
 
-        if (videoOnlyFormat != null) {
+        if (videoOnlyFormat != null && mainPlayerResponse != null) {
             val url = findUrlOrNull(videoOnlyFormat, videoId, mainPlayerResponse)
                 ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
             if (url != null) {
                 Timber.tag(logTag).d("Found video-only format (no audio): ${videoOnlyFormat.mimeType}, resolution: ${videoOnlyFormat.height}p")
                 return@runCatching url
+            }
+        }
+
+        // Logged-in WEB_REMIX video streams are bot-checked like audio streams;
+        // fall back to the non-auth guest clients so video keeps working.
+        if (isLoggedIn || mainPlayerResponse == null) {
+            for (client in arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID)) {
+                val guestResponse = YouTube.player(videoId, playlistId, client, poToken = poToken).getOrNull() ?: continue
+                val guestMuxed = guestResponse.streamingData?.formats?.filter { it.isVideo }?.maxByOrNull { it.bitrate }
+                val guestFormat = guestMuxed ?: guestResponse.streamingData?.adaptiveFormats
+                    ?.filter { it.isVideo }?.maxByOrNull { it.bitrate } ?: continue
+                val guestUrl = findUrlOrNull(guestFormat, videoId, guestResponse)
+                    ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
+                if (guestUrl != null) {
+                    Timber.tag(logTag).d("Found video stream from guest client ${client.clientName}")
+                    return@runCatching guestUrl
+                }
             }
         }
 
