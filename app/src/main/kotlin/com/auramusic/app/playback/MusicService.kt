@@ -2969,6 +2969,7 @@ class MusicService :
         poTokenProvider.invalidatePoTokens(mediaId)
         
         incrementRetryCount(mediaId)
+        val retryAttempt = currentMediaIdRetryCount[mediaId] ?: 1
         
         retryJob?.cancel()
         retryJob = scope.launch {
@@ -2977,8 +2978,9 @@ class MusicService :
             // Clear all caches including decryption caches
             performAggressiveCacheClear(mediaId)
             
-            // Additional delay for page reload errors as they may be rate-limited
-            delay(RETRY_DELAY_MS * 2)
+            // Exponential backoff: 4s, 8s, 16s — page reload errors are often rate-limited
+            val delayMs = RETRY_DELAY_MS * (1L shl (retryAttempt + 1))
+            delay(delayMs)
             
             // Re-prepare the player
             val currentPosition = player.currentPosition
@@ -2986,7 +2988,7 @@ class MusicService :
             player.seekTo(currentIndex, currentPosition)
             player.prepare()
             
-            Timber.tag(TAG).d("Retrying playback for $mediaId after page reload error")
+            Timber.tag(TAG).d("Retrying playback for $mediaId after page reload error (attempt $retryAttempt, delay ${delayMs}ms)")
         }
     }
     
@@ -3002,6 +3004,7 @@ class MusicService :
         poTokenProvider.invalidatePoTokens(mediaId)
         
         incrementRetryCount(mediaId)
+        val retryAttempt = currentMediaIdRetryCount[mediaId] ?: 1
         
         // Clear the cached URL
         songUrlCache.remove(mediaId)
@@ -3014,9 +3017,12 @@ class MusicService :
             Timber.tag(TAG).e(e, "Failed to clear decryption caches")
         }
         
+        // Exponential backoff: 2s, 4s, 8s — YouTube rate-limit windows are 2-5s
+        val delayMs = RETRY_DELAY_MS * (1L shl retryAttempt)
+        
         retryJob?.cancel()
         retryJob = scope.launch {
-            delay(RETRY_DELAY_MS)
+            delay(delayMs)
             
             // Seek to current position to force URL re-resolution
             val currentPosition = player.currentPosition
@@ -3024,7 +3030,7 @@ class MusicService :
             player.seekTo(currentIndex, currentPosition)
             player.prepare()
             
-            Timber.tag(TAG).d("Retrying playback for $mediaId after 403 error")
+            Timber.tag(TAG).d("Retrying playback for $mediaId after 403 error (attempt $retryAttempt, delay ${delayMs}ms)")
         }
     }
     
@@ -3042,18 +3048,22 @@ class MusicService :
         poTokenProvider.invalidatePoTokens(mediaId)
         
         incrementRetryCount(mediaId)
+        val retryAttempt = currentMediaIdRetryCount[mediaId] ?: 1
+        
+        // Exponential backoff: 2s, 4s, 8s — YouTube rate-limit windows are 2-5s
+        val delayMs = RETRY_DELAY_MS * (1L shl retryAttempt)
         
         retryJob?.cancel()
         retryJob = scope.launch {
             performAggressiveCacheClear(mediaId)
-            delay(RETRY_DELAY_MS)
+            delay(delayMs)
 
             val currentPosition = player.currentPosition
             val currentIndex = player.currentMediaItemIndex
             player.seekTo(currentIndex, currentPosition)
             player.prepare()
             
-            Timber.tag(TAG).d("Retrying playback for $mediaId after generic IO error")
+            Timber.tag(TAG).d("Retrying playback for $mediaId after generic IO error (attempt $retryAttempt, delay ${delayMs}ms)")
         }
     }
 
