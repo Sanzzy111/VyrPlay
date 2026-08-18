@@ -43,29 +43,33 @@ fun PlaybackError(
         ?: error.message 
         ?: stringResource(R.string.error_unknown)
     
-    // Check if this is an age-restricted content error
-    val isAgeRestricted = rawErrorMessage.contains("age", ignoreCase = true) ||
-            rawErrorMessage.contains("Sign in to confirm your age", ignoreCase = true) ||
-            rawErrorMessage.contains("LOGIN_REQUIRED", ignoreCase = true) ||
+    // Check if this is an age-restricted content error (must contain age keywords, not just any 403)
+    val isAgeRestricted = rawErrorMessage.contains("Sign in to confirm your age", ignoreCase = true) ||
             rawErrorMessage.contains("confirm your age", ignoreCase = true) ||
-            rawErrorMessage.contains("403", ignoreCase = true) ||
-            rawErrorMessage.contains("Response code: 403", ignoreCase = true) ||
-            error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-    
+            rawErrorMessage.contains("This video may be inappropriate", ignoreCase = true) ||
+            rawErrorMessage.contains("LOGIN_REQUIRED", ignoreCase = true) ||
+            (rawErrorMessage.contains("age", ignoreCase = true) &&
+                (rawErrorMessage.contains("403", ignoreCase = true) ||
+                 rawErrorMessage.contains("Response code: 403", ignoreCase = true)))
+
+    // Check if this is a stream HTTP error (403/404/500 from bot-check, geo-block, expired URL, etc.)
+    val isStreamUnavailable = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+
     // Check if this is a NAL parsing error (malformed container)
     val isNALParsingError = rawErrorMessage.contains("Invalid NAL length", ignoreCase = true) ||
             rawErrorMessage.contains("contentIsMalformed", ignoreCase = true) ||
             rawErrorMessage.contains("PARSING_CONTAINER_MALFORMED", ignoreCase = true) ||
             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
-    
+
     // Check if this is a stream/audio decoding error with corrupted data
     val isStreamError = rawErrorMessage.contains("srcPos=") ||
             rawErrorMessage.contains("src.length") ||
             rawErrorMessage.contains("AudioTrack") ||
             isNALParsingError
-    
+
     val errorMessage = when {
-        isAgeRestricted -> "This app does not support playing age-restricted songs. We are working on fixing this issue."
+        isAgeRestricted -> "This video is age-restricted and cannot be played. Try signing in with a Google account that has age verification enabled."
+        isStreamUnavailable -> "This track is temporarily unavailable. YouTube may be rate-limiting the stream. Please try again or skip to the next track."
         isNALParsingError -> "Unable to play this video. The video stream appears to be corrupted or in an unsupported format. Please try another video or skip to the next track."
         isStreamError -> "Unable to play this track. The audio stream may be corrupted or unavailable. Please try again later or skip to the next track."
         else -> rawErrorMessage
