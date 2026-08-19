@@ -971,4 +971,18 @@
     <string name="ko_fi">Ko-fi</string>
     <string name="ko_fi_desc">Café unique pour le développeur</string>
     <string name="resume_playback">Reprendre la lecture</string>
+    <string name="liquid_glass_apply_home_cards">Effet verre sur les cartes d\'accueil</string>
+    <string name="liquid_glass_apply_home_cards_desc">Appliquer un effet de verre liquide aux cartes de l\'écran d\'accueil</string>
+    <string name="liquid_glass_apply_player">Verre sur le lecteur</string>
+    <string name="liquid_glass_apply_player_desc">Appliquer un effet « verre liquide » aux commandes du lecteur</string>
+    <string name="liquid_glass_apply_nav_bar">Effet « verre » sur la barre de navigation</string>
+    <string name="liquid_glass_apply_nav_bar_desc">Appliquer un effet « verre liquide » à la barre de navigation inférieure</string>
+    <string name="home_layout_mode">Agencement de l\'accueil</string>
+    <string name="home_layout_list">Affichage sous forme de liste</string>
+    <string name="home_layout_grid">Affichage en grille</string>
+    <string name="mini_player_height">Taille du lecteur</string>
+    <string name="mini_player_corner_radius">Rayon d\'angle du lecteur</string>
+    <string name="mini_player_show_favorite">Afficher le bouton « Ajouter aux favoris »</string>
+    <string name="mini_player_show_subscribe">Afficher le bouton « S\'abonner »</string>
+    <string name="mini_player_show_hardware">Afficher le bouton physique</string>
 </resources>
