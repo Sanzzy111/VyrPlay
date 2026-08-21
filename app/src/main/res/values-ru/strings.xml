@@ -792,4 +792,5 @@
     <string name="clear_song_cache">Очистить кеш песен</string>
     <string name="size_used">Использовано %s</string>
     <string name="clear_downloads_dialog">Вы точно хотите удалить все загруженные песни?</string>
+    <string name="discord_information">AuraMusic использует библиотеку KizzyRPC для определения статуса вашей учетной записи Discord. Это предполагает использование соединения Discord Gateway, которое может считаться нарушением TOS Discord. Однако по этой причине не известно случаев приостановления использования учетных записей пользователей. Используйте на свой риск.\nAuramusic будет извлекать только ваш токен, а все остальное хранится локально.</string>
 </resources>
