@@ -14,8 +14,10 @@ import com.auramusic.innertube.YouTube
 import com.auramusic.innertube.models.YouTubeClient
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_NO_SDK
+import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_65_10
 import com.auramusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
 import com.auramusic.innertube.models.YouTubeClient.Companion.IPADOS
+import com.auramusic.innertube.models.YouTubeClient.Companion.VISIONOS
 import com.auramusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import com.auramusic.innertube.models.response.PlayerResponse
 import com.auramusic.app.constants.AudioQuality
@@ -42,12 +44,6 @@ object YTPlayerUtils {
         .build()
 
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
-
-    private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        ANDROID,
-        ANDROID_VR_NO_AUTH,
-        IPADOS,
-    )
     data class PlaybackData(
         val audioConfig: PlayerResponse.PlayerConfig.AudioConfig?,
         val videoDetails: PlayerResponse.VideoDetails?,
@@ -55,6 +51,10 @@ object YTPlayerUtils {
         val format: PlayerResponse.StreamingData.Format,
         val streamUrl: String,
         val streamExpiresInSeconds: Int,
+        /** Client that produced the stream, for logging/debug. */
+        val streamClient: String = "unknown",
+        /** Headers that must accompany every request to [streamUrl]. */
+        val streamHeaders: Map<String, String> = emptyMap(),
     )
     /**
      * Custom player response intended to use for playback.
@@ -113,20 +113,23 @@ object YTPlayerUtils {
         val playbackTracking = mainPlayerResponse?.playbackTracking
 
         // Order in which clients are used to build a usable stream URL.
-        // YouTube bot-checks web clients (WEB_REMIX) and serves their stream
-        // URLs only after an attestation check that fails for non-browser apps,
-        // so resolution "succeeds" but the actual fetch dies with
-        // IO_UNSPECIFIED (2000) — both when logged in (login-bound URLs) and
-        // when logged out. Always prefer the non-auth guest clients first,
-        // regardless of login state. Keep MAIN_CLIENT for metadata (loudness /
-        // history tracking) and as a last resort for age-restricted content that
-        // genuinely needs a session. Note: ANDROID is loginSupported=true, so it
-        // is deliberately kept AFTER the truly cookie-free clients to avoid
-        // re-introducing the bot-check for signed-in users.
-        val streamClients: Array<YouTubeClient> = (
-            arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK) +
-                arrayOf(MAIN_CLIENT) + STREAM_FALLBACK_CLIENTS
-            ).distinct().toTypedArray()
+        //
+        // YouTube's 2026 anti-bot enforcement has tightened the older guest
+        // identities (legacy ANDROID_VR 1.61, IPADOS, ANDROID_NO_SDK), which
+        // now frequently serve URLs that 403 at fetch time (surfaced by the
+        // player as IO_BAD_HTTP_STATUS). The currently most permissive guests
+        // come first; WEB_REMIX stays in the middle with a session PO token;
+        // plain ANDROID remains as a last-resort guest. Metadata
+        // (loudness/history tracking) always comes from MAIN_CLIENT.
+        val streamClients: Array<YouTubeClient> = arrayOf(
+            VISIONOS,
+            ANDROID_VR_1_65_10,
+            ANDROID_VR_NO_AUTH,
+            IPADOS,
+            WEB_REMIX,
+            ANDROID_NO_SDK,
+            ANDROID,
+        )
 
         var fallbackFailure: String? = null
         for (client in streamClients) {
@@ -140,7 +143,9 @@ object YTPlayerUtils {
             } else {
                 // Guest clients must never carry the user's session, otherwise a
                 // logged-in request to a cookie-free fallback still bot-checks.
-                val clientPoToken = poTokenProvider?.getPlayerPoToken(videoId)
+                // Web-family clients additionally need the session-bound PO token
+                // inside serviceIntegrityDimensions; guests must NOT receive it.
+                val clientPoToken = if (client.useWebPoTokens) mainClientPoToken else null
                 YouTube.player(
                     videoId,
                     playlistId,
@@ -166,6 +171,7 @@ object YTPlayerUtils {
                 videoDetails = videoDetails,
                 playbackTracking = playbackTracking,
                 clientName = client.clientName,
+                client = client,
             )?.let { return@runCatching it }
         }
 
@@ -186,6 +192,7 @@ object YTPlayerUtils {
         videoDetails: PlayerResponse.VideoDetails?,
         playbackTracking: PlayerResponse.PlaybackTracking?,
         clientName: String,
+        client: YouTubeClient,
     ): PlaybackData? {
         if (response.playabilityStatus.status != "OK") {
             Timber.tag(logTag).d("Player response status not OK for $clientName: ${response.playabilityStatus.reason}")
@@ -197,8 +204,10 @@ object YTPlayerUtils {
                 Timber.tag(logTag).d("No suitable format found for client: $clientName")
                 return null
             }
+        // Only web-family clients take a `pot` parameter on their stream URLs;
+        // appending one to guest-client URLs can invalidate them.
         val streamUrl = findUrlOrNull(format, videoId, response, allowSlowFallback = clientName != MAIN_CLIENT.clientName)
-            ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
+            ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider, appendPot = client.useWebPoTokens) }
             ?: run {
                 Timber.tag(logTag).d("Stream URL not found for client: $clientName")
                 return null
@@ -210,12 +219,13 @@ object YTPlayerUtils {
             }
 
         // Probe the URL before committing to it. YouTube now serves some
-        // clients (e.g. android_vr) URLs that look valid but 403 at fetch
-        // time because they are PO-token gated server-side. Handing such a
-        // URL to ExoPlayer surfaces as ERROR_CODE_IO_BAD_HTTP_STATUS (2004)
-        // ("temporarily unavailable / rate-limited"). A 1-byte ranged GET is
-        // cheap and lets us fall through to the next client instead.
-        if (!isStreamUrlUsable(streamUrl)) {
+        // clients URLs that look valid but 403 at fetch time because they are
+        // PO-token gated server-side. Handing such a URL to ExoPlayer
+        // surfaces as ERROR_CODE_IO_BAD_HTTP_STATUS (2004) ("temporarily
+        // unavailable / rate-limited"). A 1-byte ranged GET with the client's
+        // own headers is cheap and lets us fall through to the next client
+        // instead.
+        if (!isStreamUrlUsable(streamUrl, client)) {
             Timber.tag(logTag).w("Stream URL from $clientName failed probe (POT-gated/expired), trying next client")
             return null
         }
@@ -228,7 +238,31 @@ object YTPlayerUtils {
             format,
             streamUrl,
             streamExpiresInSeconds,
+            streamClient = clientName,
+            streamHeaders = streamHeadersForClient(client),
         )
+    }
+
+    /**
+     * Headers that must accompany every request to a URL served by [client].
+     * googlevideo validates the request fingerprint loosely, but web-family
+     * URLs in particular are sensitive to a missing browser-ish User-Agent
+     * and Referer/Origin; guest clients want their app UA echoed.
+     */
+    fun streamHeadersForClient(client: YouTubeClient): Map<String, String> = buildMap {
+        put("User-Agent", client.userAgent)
+        put("Accept", "*/*")
+        put("Accept-Language", "en-US,en;q=0.9")
+        when (client.clientName) {
+            "WEB_REMIX" -> {
+                put("Referer", "https://music.youtube.com/")
+                put("Origin", "https://music.youtube.com")
+            }
+            else -> {
+                put("Referer", "https://www.youtube.com/")
+                put("Origin", "https://www.youtube.com")
+            }
+        }
     }
     /**
      * Simple player response intended to use for metadata only.
@@ -287,20 +321,20 @@ return format
         // the user is logged in or not. Prefer the non-auth guest clients first
         // so video keeps working regardless of session state; MAIN_CLIENT is used
         // for metadata and as a last resort for age-restricted content.
-        val guestClients = arrayOf(ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID)
+        val guestClients = arrayOf(VISIONOS, ANDROID_VR_1_65_10, ANDROID_VR_NO_AUTH, IPADOS, ANDROID_NO_SDK, ANDROID)
         for (client in guestClients) {
             val guestResponse = YouTube.player(
                 videoId,
                 playlistId,
                 client,
-                poToken = poToken,
+                poToken = null,
                 setLogin = false,
             ).getOrNull() ?: continue
             val guestMuxed = guestResponse.streamingData?.formats?.filter { it.isVideo }?.maxByOrNull { it.bitrate }
             val guestFormat = guestMuxed ?: guestResponse.streamingData?.adaptiveFormats
                 ?.filter { it.isVideo }?.maxByOrNull { it.bitrate } ?: continue
+            // Guests never take a `pot` parameter.
             val guestUrl = findUrlOrNull(guestFormat, videoId, guestResponse)
-                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
             if (guestUrl != null) {
                 Timber.tag(logTag).d("Found video stream from guest client ${client.clientName}")
                 return@runCatching guestUrl
@@ -317,7 +351,7 @@ return format
 
         if (muxedFormat != null && mainPlayerResponse != null) {
             val url = findUrlOrNull(muxedFormat, videoId, mainPlayerResponse)
-                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
+                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider, appendPot = true) }
             if (url != null) {
                 Timber.tag(logTag).d("Found muxed video format: ${muxedFormat.mimeType}, resolution: ${muxedFormat.height}p")
                 return@runCatching url
@@ -332,7 +366,7 @@ return format
 
         if (videoOnlyFormat != null && mainPlayerResponse != null) {
             val url = findUrlOrNull(videoOnlyFormat, videoId, mainPlayerResponse)
-                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider) }
+                ?.let { addStreamingPoTokenIfNeeded(it, videoId, poTokenProvider, appendPot = true) }
             if (url != null) {
                 Timber.tag(logTag).d("Found video-only format (no audio): ${videoOnlyFormat.mimeType}, resolution: ${videoOnlyFormat.height}p")
                 return@runCatching url
@@ -362,17 +396,19 @@ return format
      * ranged GET (HEAD is sometimes rejected by googlevideo while ranged
      * GETs succeed). Only 2xx/206 counts as usable.
      */
-    private fun isStreamUrlUsable(url: String): Boolean {
+    private fun isStreamUrlUsable(url: String, client: YouTubeClient): Boolean {
         if (!url.contains("googlevideo.com") && !url.contains("youtube.com/videoplayback")) {
             // Not a GVS URL (e.g. local/other source) — accept as-is.
             return true
         }
         return try {
-            val request = okhttp3.Request.Builder()
+            val requestBuilder = okhttp3.Request.Builder()
                 .url(url)
                 .header("Range", "bytes=0-0")
-                .build()
-            httpClient.newCall(request).execute().use { response ->
+            streamHeadersForClient(client).forEach { (name, value) ->
+                requestBuilder.header(name, value)
+            }
+            httpClient.newCall(requestBuilder.build()).execute().use { response ->
                 val ok = response.isSuccessful
                 if (!ok) {
                     Timber.tag(logTag).d("Stream probe got HTTP ${response.code}")
@@ -452,7 +488,9 @@ return format
         streamUrl: String,
         videoId: String,
         poTokenProvider: PoTokenProvider?,
+        appendPot: Boolean,
     ): String {
+        if (!appendPot) return streamUrl
         if (!streamUrl.contains("googlevideo.com") && !streamUrl.contains("youtube.com/videoplayback")) {
             return streamUrl
         }

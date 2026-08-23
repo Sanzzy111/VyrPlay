@@ -252,9 +252,9 @@ class InnerTube {
                             )
                         )
                     } else null,
-                    serviceIntegrityDimensions = poToken?.let {
+                    serviceIntegrityDimensions = if (client.useWebPoTokens) poToken?.let {
                         PlayerBody.ServiceIntegrityDimensions(poToken = it)
-                    },
+                    } else null,
                 )
             )
         }

@@ -570,7 +570,14 @@ class MusicService :
     private var silenceSkipJob: Job? = null
     
     // URL cache for stream URLs - class-level so it can be invalidated on errors
-    private val songUrlCache = HashMap<String, Pair<String, Long>>()
+    /** Cached stream URL + expiry + the headers required when fetching it. */
+    private data class StreamUrlEntry(
+        val url: String,
+        val expiresAtMs: Long,
+        val headers: Map<String, String> = emptyMap(),
+    )
+
+    private val songUrlCache = HashMap<String, StreamUrlEntry>()
     
     // Enhanced error tracking for strict retry management
     private var currentMediaIdRetryCount = mutableMapOf<String, Int>()
@@ -3274,9 +3281,11 @@ class MusicService :
                 return@Factory dataSpec
             }
 
-            songUrlCache[mediaId]?.takeIf { it.second > System.currentTimeMillis() }?.let {
+            songUrlCache[mediaId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let { entry ->
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                return@Factory dataSpec.withUri(it.first.toUri())
+                return@Factory dataSpec
+                    .withUri(entry.url.toUri())
+                    .withRequestHeaders(entry.headers)
             }
 
             val playbackData = runBlocking(Dispatchers.IO) {
@@ -3324,7 +3333,11 @@ class MusicService :
                 ?.times(1000L)
             val responseExpiresAt = System.currentTimeMillis() + (nonNullPlayback.streamExpiresInSeconds * 1000L)
             val expiresAt = minOf(urlExpiresAt ?: Long.MAX_VALUE, responseExpiresAt) - 5 * 60_000L
-            songUrlCache[mediaId] = streamUrl to expiresAt
+            songUrlCache[mediaId] = StreamUrlEntry(
+                url = streamUrl,
+                expiresAtMs = expiresAt,
+                headers = nonNullPlayback.streamHeaders,
+            )
 
             scope.launch(Dispatchers.IO) {
                 val format = nonNullPlayback.format
@@ -3366,7 +3379,10 @@ class MusicService :
             } else {
                 minOf(CHUNK_LENGTH, dataSpec.length - dataSpec.position)
             }
-            return@Factory dataSpec.withUri(streamUri).subrange(dataSpec.position, chunkLength)
+            return@Factory dataSpec
+                .withUri(streamUri)
+                .withRequestHeaders(nonNullPlayback.streamHeaders)
+                .subrange(dataSpec.position, chunkLength)
         }
     }
 
