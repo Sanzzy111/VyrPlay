@@ -19,12 +19,21 @@ import com.auramusic.innertube.models.YouTubeClient.Companion.IPADOS
 import com.auramusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import com.auramusic.innertube.models.response.PlayerResponse
 import com.auramusic.app.constants.AudioQuality
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 object YTPlayerUtils {
     private const val logTag = "YTPlayerUtils"
+
+    /**
+     * Hard deadline for resolving a playable stream URL (PO token + player
+     * requests + signature fallbacks across all clients). Bounded so failures
+     * surface quickly into the app's retry/skip logic instead of spinning.
+     */
+    private const val STREAM_RESOLUTION_TIMEOUT_MS = 30_000L
 
     private val httpClient = OkHttpClient.Builder()
         .proxy(YouTube.proxy)
@@ -51,6 +60,12 @@ object YTPlayerUtils {
      * Custom player response intended to use for playback.
      * Metadata like audioConfig and videoDetails are from [MAIN_CLIENT].
      * Format & stream can be from [MAIN_CLIENT] or [STREAM_FALLBACK_CLIENTS].
+     *
+     * The whole resolution chain (PO token minting + one /player request per
+     * fallback client + NewPipe signature work) is bounded by a hard time
+     * budget. Without it, a degraded network or an anti-bot outage makes the
+     * resolver hang for minutes — the UI shows "loading" forever and the queue
+     * never advances, which is exactly the stuck-Next-song report on TV.
      */
     suspend fun playerResponseForPlayback(
         videoId: String,
@@ -58,6 +73,27 @@ object YTPlayerUtils {
         audioQuality: AudioQuality,
         connectivityManager: ConnectivityManager,
         poTokenProvider: PoTokenProvider? = null,
+    ): Result<PlaybackData> = try {
+        withTimeout(STREAM_RESOLUTION_TIMEOUT_MS) {
+            resolvePlaybackData(videoId, playlistId, audioQuality, connectivityManager, poTokenProvider)
+        }
+    } catch (e: TimeoutCancellationException) {
+        Timber.tag(logTag).w("Stream resolution timed out after ${STREAM_RESOLUTION_TIMEOUT_MS}ms for $videoId")
+        Result.failure(
+            PlaybackException(
+                "Stream resolution timed out",
+                e,
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+            )
+        )
+    }
+
+    private suspend fun resolvePlaybackData(
+        videoId: String,
+        playlistId: String?,
+        audioQuality: AudioQuality,
+        connectivityManager: ConnectivityManager,
+        poTokenProvider: PoTokenProvider?,
     ): Result<PlaybackData> = runCatching {
         Timber.tag(logTag).d("Fetching player response for videoId: $videoId, playlistId: $playlistId")
         val isLoggedIn = YouTube.cookie != null

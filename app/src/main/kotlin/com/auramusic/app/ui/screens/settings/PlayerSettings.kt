@@ -201,7 +201,7 @@ fun PlayerSettings(
     )
     val (autoSkipNextOnError, onAutoSkipNextOnErrorChange) = rememberPreference(
         AutoSkipNextOnErrorKey,
-        defaultValue = false
+        defaultValue = true
     )
     val (persistentShuffleAcrossQueues, onPersistentShuffleAcrossQueuesChange) = rememberPreference(
         PersistentShuffleAcrossQueuesKey,

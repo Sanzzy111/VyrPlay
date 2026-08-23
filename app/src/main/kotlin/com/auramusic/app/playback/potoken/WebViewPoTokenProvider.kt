@@ -50,6 +50,13 @@ class WebViewPoTokenProvider(
     @Volatile private var webView: WebView? = null
     @Volatile private var webViewReady: CompletableDeferred<Unit>? = null
 
+    /**
+     * Set once WebView construction has proven impossible (many Android TV
+     * images ship no WebView at all). Without this memo, every token request
+     * would re-attempt creation and stall the playback resolver for seconds.
+     */
+    @Volatile private var webViewUnavailable = false
+
     /** Serialises BotGuard runs — the WebView only handles one at a time. */
     private val generationMutex = Mutex()
 
@@ -134,6 +141,7 @@ class WebViewPoTokenProvider(
      * until `onPageFinished` fires. Returns null if WebView is unavailable.
      */
     private suspend fun ensureWebViewReady(): WebView? {
+        if (webViewUnavailable) return null
         webView?.let { current ->
             webViewReady?.let { ready ->
                 return withTimeoutOrNull(10_000L) {
@@ -171,6 +179,9 @@ class WebViewPoTokenProvider(
                 createdDeferred.complete(wv)
             } catch (e: Throwable) {
                 Timber.tag(logTag).w(e, "Failed to create WebView for PO token generation")
+                // WebView is not available in this process (common on TV
+                // builds); stop re-attempting on every future token request.
+                webViewUnavailable = true
                 createdDeferred.complete(null)
             }
         }

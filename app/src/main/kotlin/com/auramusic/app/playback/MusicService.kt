@@ -302,15 +302,13 @@ class MusicService :
 
     /**
      * Wraps [DefaultMediaNotificationProvider] so the asynchronous artwork-load
-     * callback (which Media3 1.7.1 routes straight into
-     * [androidx.media3.session.MediaNotificationManager.onNotificationChanged]
-     * -> startForeground without a try/catch) cannot fire while the app is in
-     * the background. On Android 12+ that path throws
+     * callback cannot fire into [androidx.media3.session.MediaNotificationManager]
+     * while the app is in the background. On Android 12+ that path throws
      * [android.app.ForegroundServiceStartNotAllowedException] and crashes the
-     * process. The official fix only landed in Media3 1.11.0, so we gate it
-     * ourselves: notification artwork updates are deferred while the app is
-     * backgrounded and flushed (foreground-safe) on the next notification
-     * refresh, so no update is ever lost.
+     * process (guarded officially since Media3 1.11.0, but kept here so no
+     * update is ever dropped): notification artwork updates are deferred while
+     * the app is backgrounded and flushed (foreground-safe) on the next
+     * notification refresh.
      */
     private class ForegroundSafeMediaNotificationProvider(
         private val context: Context,
@@ -350,6 +348,9 @@ class MusicService :
             action: String,
             extras: Bundle,
         ): Boolean = delegate.handleCustomCommand(mediaSession, action, extras)
+
+        override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo =
+            delegate.getNotificationChannelInfo()
 
         private fun flushPendingNotification(callback: MediaNotification.Provider.Callback) {
             val pending = pendingNotification ?: return
@@ -2792,7 +2793,7 @@ class MusicService :
         }
 
         // Final fallback
-        if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
+        if (dataStore.get(AutoSkipNextOnErrorKey, true)) {
             Timber.tag(TAG).d("Auto-skipping to next track due to unrecoverable error")
             skipOnError()
         } else {
@@ -3071,7 +3072,7 @@ class MusicService :
      * Handles final failure when all recovery attempts have been exhausted.
      */
     private fun handleFinalFailure() {
-        if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
+        if (dataStore.get(AutoSkipNextOnErrorKey, true)) {
             Timber.tag(TAG).d("All recovery attempts exhausted, auto-skipping to next track")
             skipOnError()
         } else {
@@ -3214,6 +3215,11 @@ class MusicService :
             }
 
             songUrlCache[mediaId]?.takeIf { it.second > System.currentTimeMillis() }?.let {
+                // The URL still works, but if it is about to expire mid-song,
+                // mint a fresh one in the background now. This prevents the
+                // mid-playback 403 stall on long sessions (YouTube revokes
+                // URLs earlier than `expire` under bot suspicion).
+                maybeRefreshStreamUrlBeforeExpiry(mediaId)
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec.withUri(it.first.toUri())
             }
@@ -3316,6 +3322,48 @@ class MusicService :
                 arrayOf(MatroskaExtractor(), FragmentedMp4Extractor(), Mp4Extractor())
             },
         )
+
+    /** In-flight background stream-URL refreshes (dedupe guard). */
+    private val pendingUrlRefreshes: MutableSet<String> =
+        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+    /**
+     * If the cached stream URL for [mediaId] expires within
+     * [STREAM_URL_PREWARM_MARGIN_MS], resolve a fresh one in the background so
+     * playback never stalls on a mid-song 403. Deduplicated per mediaId.
+     */
+    private fun maybeRefreshStreamUrlBeforeExpiry(mediaId: String) {
+        val expiresAt = songUrlCache[mediaId]?.second ?: return
+        if (expiresAt - System.currentTimeMillis() > STREAM_URL_PREWARM_MARGIN_MS) return
+        if (!pendingUrlRefreshes.add(mediaId)) return
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val playbackData = YTPlayerUtils.playerResponseForPlayback(
+                    mediaId,
+                    audioQuality = audioQuality,
+                    connectivityManager = connectivityManager,
+                    poTokenProvider = poTokenProvider,
+                ).getOrNull() ?: return@launch
+                val streamUri = playbackData.streamUrl.toUri()
+                val urlExpiresAt = streamUri.getQueryParameter("expire")
+                    ?.toLongOrNull()?.times(1000L)
+                val responseExpiresAt =
+                    System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L)
+                val newExpiresAt =
+                    minOf(urlExpiresAt ?: Long.MAX_VALUE, responseExpiresAt) - 5 * 60_000L
+                // Only swap if strictly fresher than what we have.
+                if (newExpiresAt > (songUrlCache[mediaId]?.second ?: 0L)) {
+                    songUrlCache[mediaId] = playbackData.streamUrl to newExpiresAt
+                    Timber.tag(TAG).d("Pre-warmed fresh stream URL for $mediaId")
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Stream URL pre-warm failed for $mediaId")
+            } finally {
+                pendingUrlRefreshes.remove(mediaId)
+            }
+        }
+    }
 
     private fun createRenderersFactory(
         eqProcessor: CustomEqualizerAudioProcessor,
@@ -3939,8 +3987,17 @@ class MusicService :
                         Timber.d("setVideoMode: Using cached video search result for $mediaId")
                         Result.success(cachedSearchResult)
                     } else {
-                        withContext(Dispatchers.IO) {
-                            FlowPlayerUtils.getVideoStreamUrlWithFallback(songTitle, artistName, mediaId, isVideoSong)
+                        // Bounded: if the video lookup hangs (slow network, bot
+                        // check, extractor stall) we must fall back to audio
+                        // instead of leaving the TV paused on a black surface.
+                        val timeoutResult = withContext(Dispatchers.IO) {
+                            kotlinx.coroutines.withTimeoutOrNull(VIDEO_SEARCH_TIMEOUT_MS) {
+                                FlowPlayerUtils.getVideoStreamUrlWithFallback(songTitle, artistName, mediaId, isVideoSong)
+                            }
+                        }
+                        timeoutResult ?: run {
+                            Timber.w("setVideoMode: Video resolution timed out for $mediaId after ${VIDEO_SEARCH_TIMEOUT_MS}ms")
+                            Result.failure(Exception("Video resolution timed out"))
                         }
                     }
 
@@ -4647,6 +4704,12 @@ class MusicService :
         const val MAX_CONSECUTIVE_ERR = 5
         const val MAX_RETRY_COUNT = 10
         const val MAX_GAIN_MB = 300 // Maximum gain in millibels (3 dB)
+
+        /** Refresh a cached stream URL in the background when it expires within this window. */
+        private const val STREAM_URL_PREWARM_MARGIN_MS = 10 * 60_000L
+
+        /** Hard deadline for TV/mobile video-mode stream search before falling back to audio. */
+        private const val VIDEO_SEARCH_TIMEOUT_MS = 20_000L
         const val MIN_GAIN_MB = -1500 // Minimum gain in millibels (-15 dB)
 
         const val TAG = "MusicService"
