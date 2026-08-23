@@ -60,6 +60,14 @@ class WebViewPoTokenProvider(
     /** Serialises BotGuard runs — the WebView only handles one at a time. */
     private val generationMutex = Mutex()
 
+    /**
+     * When attestation fails (network outage, anti-bot churn, rate limiting),
+     * back off before minting again instead of retrying on every playback
+     * request — tight retry loops against jnn-pa/googlevideo are exactly what
+     * escalates temporary blocks into longer ones.
+     */
+    @Volatile private var lastGenerationFailureAtMs = 0L
+
     /** In-flight request whose JS bridge callback resolves the token. */
     private val pendingRequest = AtomicReference<CompletableDeferred<String?>?>(null)
 
@@ -90,6 +98,14 @@ class WebViewPoTokenProvider(
     ): String? {
         cache[key]?.takeIf { it.isValid() }?.let { return it.value }
 
+        // Failure backoff: recent attestation failure — fail fast without
+        // touching the WebView or Google's endpoints again just yet.
+        val lastFailure = lastGenerationFailureAtMs
+        if (lastFailure != 0L && System.currentTimeMillis() - lastFailure < FAILURE_BACKOFF_MS) {
+            Timber.tag(logTag).d("PO token generation backing off (recent failure)")
+            return null
+        }
+
         return generationMutex.withLock {
             cache[key]?.takeIf { it.isValid() }?.let { return@withLock it.value }
 
@@ -103,7 +119,10 @@ class WebViewPoTokenProvider(
             }
 
             if (token != null) {
+                lastGenerationFailureAtMs = 0L
                 cache[key] = CachedToken(token, System.currentTimeMillis() + 6 * 60 * 60 * 1000L)
+            } else {
+                lastGenerationFailureAtMs = System.currentTimeMillis()
             }
             token
         }
@@ -206,6 +225,9 @@ class WebViewPoTokenProvider(
     }
 
     override fun invalidatePoTokens(videoId: String?) {
+        // An explicit invalidation is a deliberate retry signal (e.g. from the
+        // player's 403 recovery path) — lift any failure backoff.
+        lastGenerationFailureAtMs = 0L
         if (videoId == null) {
             playerTokenCache.clear()
             streamingTokenCache.clear()
@@ -346,5 +368,8 @@ class WebViewPoTokenProvider(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/131.0.0.0 Safari/537.36"
+
+        /** Wait this long after a failed attestation before trying to mint again. */
+        private const val FAILURE_BACKOFF_MS = 60_000L
     }
 }

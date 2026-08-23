@@ -209,6 +209,17 @@ object YTPlayerUtils {
                 return null
             }
 
+        // Probe the URL before committing to it. YouTube now serves some
+        // clients (e.g. android_vr) URLs that look valid but 403 at fetch
+        // time because they are PO-token gated server-side. Handing such a
+        // URL to ExoPlayer surfaces as ERROR_CODE_IO_BAD_HTTP_STATUS (2004)
+        // ("temporarily unavailable / rate-limited"). A 1-byte ranged GET is
+        // cheap and lets us fall through to the next client instead.
+        if (!isStreamUrlUsable(streamUrl)) {
+            Timber.tag(logTag).w("Stream URL from $clientName failed probe (POT-gated/expired), trying next client")
+            return null
+        }
+
         Timber.tag(logTag).d("Using stream from $clientName: ${format.mimeType}, bitrate=${format.bitrate}")
         return PlaybackData(
             audioConfig,
@@ -346,21 +357,32 @@ return format
         }
     }
 
-    private fun validateStatus(url: String): Boolean {
-        Timber.tag(logTag).d("Validating stream URL status")
-        try {
-            val requestBuilder = okhttp3.Request.Builder()
-                .head()
-                .url(url)
-            val response = httpClient.newCall(requestBuilder.build()).execute()
-            val isSuccessful = response.isSuccessful
-            Timber.tag(logTag).d("Stream URL validation result: ${if (isSuccessful) "Success" else "Failed"} (${response.code})")
-            return isSuccessful
-        } catch (e: Exception) {
-            Timber.tag(logTag).e(e, "Stream URL validation failed with exception")
-            reportException(e)
+    /**
+     * Cheap liveness probe for a GVS stream URL: fetch a single byte with a
+     * ranged GET (HEAD is sometimes rejected by googlevideo while ranged
+     * GETs succeed). Only 2xx/206 counts as usable.
+     */
+    private fun isStreamUrlUsable(url: String): Boolean {
+        if (!url.contains("googlevideo.com") && !url.contains("youtube.com/videoplayback")) {
+            // Not a GVS URL (e.g. local/other source) — accept as-is.
+            return true
         }
-        return false
+        return try {
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("Range", "bytes=0-0")
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val ok = response.isSuccessful
+                if (!ok) {
+                    Timber.tag(logTag).d("Stream probe got HTTP ${response.code}")
+                }
+                ok
+            }
+        } catch (e: Exception) {
+            Timber.tag(logTag).e(e, "Stream probe failed with exception")
+            false
+        }
     }
 
     private fun getSignatureTimestampOrNull(videoId: String): Int? {

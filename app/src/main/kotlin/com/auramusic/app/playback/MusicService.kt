@@ -678,6 +678,17 @@ class MusicService :
                     },
             ),
         )
+        // Keep the media notification visible even when playback is idle
+        // (e.g. every track just failed to resolve, or the queue finished).
+        // The default (AFTER_STOP_OR_ERROR) hides the miniplayer entirely
+        // when the player never reached READY, which looked like "the
+        // notification disappeared". ALWAYS respects user dismissal, so
+        // swiping it away still works.
+        runCatching {
+            setShowNotificationForIdlePlayer(
+                androidx.media3.session.MediaSessionService.SHOW_NOTIFICATION_FOR_IDLE_PLAYER_ALWAYS
+            )
+        }
         player = createExoPlayer()
         player.addListener(this@MusicService)
 
@@ -2627,7 +2638,16 @@ class MusicService :
         val responseCode = getHttpResponseCode(error)
         return responseCode == 403
     }
-    
+
+    /**
+     * Checks if the error is YouTube/GVS throttling us (HTTP 429/503).
+     * Retrying these quickly makes the block worse — they need long backoff.
+     */
+    private fun isRateLimitError(error: PlaybackException): Boolean {
+        val responseCode = getHttpResponseCode(error)
+        return responseCode == 429 || responseCode == 503
+    }
+
     /**
      * Checks if the error is a Range Not Satisfiable error (HTTP 416).
      * This happens when cached data doesn't match the actual stream size.
@@ -2760,6 +2780,11 @@ class MusicService :
             isPageReloadError(error) -> {
                 Timber.tag(TAG).d("Page reload error detected, performing strict recovery")
                 handlePageReloadError(mediaId)
+                return
+            }
+            isRateLimitError(error) -> {
+                Timber.tag(TAG).d("Rate limit error detected (${getHttpResponseCode(error)}), performing long backoff")
+                handleRateLimitError(mediaId)
                 return
             }
             isExpiredUrlError(error) -> {
@@ -2994,6 +3019,41 @@ class MusicService :
     }
     
     /**
+     * Handles rate-limit (429/503) errors with a long backoff. Hammering
+     * googlevideo/innertube while throttled extends the block, so wait
+     * 15s -> 30s -> 60s before one careful retry; after MAX_RETRY_PER_SONG
+     * failures the normal skip/stop path takes over.
+     */
+    private fun handleRateLimitError(mediaId: String?) {
+        if (mediaId == null) {
+            handleFinalFailure()
+            return
+        }
+
+        poTokenProvider.invalidatePoTokens(mediaId)
+        incrementRetryCount(mediaId)
+        val retryAttempt = currentMediaIdRetryCount[mediaId] ?: 1
+
+        songUrlCache.remove(mediaId)
+
+        // 15s, 30s, 60s — generous on purpose.
+        val delayMs = minOf(15_000L shl (retryAttempt - 1), 60_000L)
+
+        retryJob?.cancel()
+        retryJob = scope.launch {
+            delay(delayMs)
+
+            if (!playerInitialized.value) return@launch
+            val currentPosition = player.currentPosition
+            val currentIndex = player.currentMediaItemIndex
+            player.seekTo(currentIndex, currentPosition)
+            player.prepare()
+
+            Timber.tag(TAG).d("Retrying playback for $mediaId after rate-limit backoff (attempt $retryAttempt, delay ${delayMs}ms)")
+        }
+    }
+
+    /**
      * Handles expired URL (403) errors by clearing caches and retrying.
      */
     private fun handleExpiredUrlError(mediaId: String?) {
@@ -3215,11 +3275,6 @@ class MusicService :
             }
 
             songUrlCache[mediaId]?.takeIf { it.second > System.currentTimeMillis() }?.let {
-                // The URL still works, but if it is about to expire mid-song,
-                // mint a fresh one in the background now. This prevents the
-                // mid-playback 403 stall on long sessions (YouTube revokes
-                // URLs earlier than `expire` under bot suspicion).
-                maybeRefreshStreamUrlBeforeExpiry(mediaId)
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec.withUri(it.first.toUri())
             }
@@ -3322,48 +3377,6 @@ class MusicService :
                 arrayOf(MatroskaExtractor(), FragmentedMp4Extractor(), Mp4Extractor())
             },
         )
-
-    /** In-flight background stream-URL refreshes (dedupe guard). */
-    private val pendingUrlRefreshes: MutableSet<String> =
-        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
-
-    /**
-     * If the cached stream URL for [mediaId] expires within
-     * [STREAM_URL_PREWARM_MARGIN_MS], resolve a fresh one in the background so
-     * playback never stalls on a mid-song 403. Deduplicated per mediaId.
-     */
-    private fun maybeRefreshStreamUrlBeforeExpiry(mediaId: String) {
-        val expiresAt = songUrlCache[mediaId]?.second ?: return
-        if (expiresAt - System.currentTimeMillis() > STREAM_URL_PREWARM_MARGIN_MS) return
-        if (!pendingUrlRefreshes.add(mediaId)) return
-
-        scope.launch(Dispatchers.IO) {
-            try {
-                val playbackData = YTPlayerUtils.playerResponseForPlayback(
-                    mediaId,
-                    audioQuality = audioQuality,
-                    connectivityManager = connectivityManager,
-                    poTokenProvider = poTokenProvider,
-                ).getOrNull() ?: return@launch
-                val streamUri = playbackData.streamUrl.toUri()
-                val urlExpiresAt = streamUri.getQueryParameter("expire")
-                    ?.toLongOrNull()?.times(1000L)
-                val responseExpiresAt =
-                    System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L)
-                val newExpiresAt =
-                    minOf(urlExpiresAt ?: Long.MAX_VALUE, responseExpiresAt) - 5 * 60_000L
-                // Only swap if strictly fresher than what we have.
-                if (newExpiresAt > (songUrlCache[mediaId]?.second ?: 0L)) {
-                    songUrlCache[mediaId] = playbackData.streamUrl to newExpiresAt
-                    Timber.tag(TAG).d("Pre-warmed fresh stream URL for $mediaId")
-                }
-            } catch (e: Exception) {
-                Timber.tag(TAG).w(e, "Stream URL pre-warm failed for $mediaId")
-            } finally {
-                pendingUrlRefreshes.remove(mediaId)
-            }
-        }
-    }
 
     private fun createRenderersFactory(
         eqProcessor: CustomEqualizerAudioProcessor,
@@ -4704,9 +4717,6 @@ class MusicService :
         const val MAX_CONSECUTIVE_ERR = 5
         const val MAX_RETRY_COUNT = 10
         const val MAX_GAIN_MB = 300 // Maximum gain in millibels (3 dB)
-
-        /** Refresh a cached stream URL in the background when it expires within this window. */
-        private const val STREAM_URL_PREWARM_MARGIN_MS = 10 * 60_000L
 
         /** Hard deadline for TV/mobile video-mode stream search before falling back to audio. */
         private const val VIDEO_SEARCH_TIMEOUT_MS = 20_000L
