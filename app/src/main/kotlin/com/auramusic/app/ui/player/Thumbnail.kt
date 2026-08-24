@@ -298,7 +298,8 @@ fun Thumbnail(
         playerConnection.player.currentMediaItemIndex,
         playerConnection.player.shuffleModeEnabled,
         swipeThumbnail,
-        mediaMetadata
+        mediaMetadata,
+        videoModeEnabled
     ) {
         derivedStateOf {
             getMediaItems(playerConnection.player, swipeThumbnail)
@@ -758,7 +759,7 @@ private fun ThumbnailImage(
             )
             .background(if (videoModeEnabled) Color.Black else MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        if (isVideoSwitching || isVideoBuffering) {
+        if (isVideoSwitching && videoModeEnabled) {
             // Show loading animation while video is being fetched or buffered
             Box(
                 modifier = Modifier.fillMaxSize(),
