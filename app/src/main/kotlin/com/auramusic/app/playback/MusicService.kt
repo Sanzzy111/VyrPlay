@@ -24,6 +24,7 @@ import android.media.audiofx.AudioEffect
 import android.media.audiofx.LoudnessEnhancer
 import android.net.ConnectivityManager
 import android.os.Binder
+import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
@@ -80,6 +81,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionToken
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.MoreExecutors
@@ -311,6 +313,9 @@ class MusicService :
 
     private lateinit var foregroundNotification: Notification
 
+    @Volatile
+    private var latestMediaNotification: Notification? = null
+
     private var crossfadeEnabled = false
     private var crossfadeDuration = 5000f
     private var crossfadeGapless = true
@@ -539,6 +544,15 @@ class MusicService :
         super.onCreate()
         isRunning = true
 
+        setListener(
+            object : MediaSessionService.Listener {
+                override fun onForegroundServiceStartNotAllowedException() {
+                    Timber.tag(TAG).w("onForegroundServiceStartNotAllowedException: re-promoting to foreground")
+                    promoteToForegroundWithLatestNotification()
+                }
+            },
+        )
+
         // Player rediness reset to false
         playerInitialized.value = false
         
@@ -591,13 +605,14 @@ class MusicService :
                 .setOngoing(true)
                 .build()
             foregroundNotification = notification
-            startForeground(NOTIFICATION_ID, notification)
+            latestMediaNotification = notification
+            startForegroundSafely(notification)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to create foreground notification")
             reportException(e)
         }
 
-        setMediaNotificationProvider(
+        val defaultMediaNotificationProvider =
             DefaultMediaNotificationProvider(
                 this,
                 { NOTIFICATION_ID },
@@ -606,19 +621,44 @@ class MusicService :
             )
                 .apply {
                     setSmallIcon(R.drawable.ic_notification_icon)
-                },
+                }
+
+        setMediaNotificationProvider(
+            object : MediaNotification.Provider {
+                override fun createNotification(
+                    mediaSession: MediaSession,
+                    mediaButtonPreferences: ImmutableList<CommandButton>,
+                    actionFactory: MediaNotification.ActionFactory,
+                    onNotificationChangedCallback: MediaNotification.Provider.Callback,
+                ): MediaNotification {
+                    val trackingCallback =
+                        MediaNotification.Provider.Callback { notification ->
+                            latestMediaNotification = notification.notification
+                            onNotificationChangedCallback.onNotificationChanged(notification)
+                        }
+
+                    return defaultMediaNotificationProvider
+                        .createNotification(
+                            mediaSession,
+                            mediaButtonPreferences,
+                            actionFactory,
+                            trackingCallback,
+                        ).also { mediaNotification ->
+                            latestMediaNotification = mediaNotification.notification
+                        }
+                }
+
+                override fun handleCustomCommand(
+                    session: MediaSession,
+                    action: String,
+                    extras: Bundle,
+                ): Boolean = defaultMediaNotificationProvider.handleCustomCommand(session, action, extras)
+
+                override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo =
+                    defaultMediaNotificationProvider.notificationChannelInfo
+            },
         )
-        // Keep the media notification visible even when playback is idle
-        // (e.g. every track just failed to resolve, or the queue finished).
-        // The default (AFTER_STOP_OR_ERROR) hides the miniplayer entirely
-        // when the player never reached READY, which looked like "the
-        // notification disappeared". ALWAYS respects user dismissal, so
-        // swiping it away still works.
-        runCatching {
-            setShowNotificationForIdlePlayer(
-                androidx.media3.session.MediaSessionService.SHOW_NOTIFICATION_FOR_IDLE_PLAYER_ALWAYS
-            )
-        }
+
         player = createExoPlayer()
         player.addListener(this@MusicService)
 
@@ -3553,32 +3593,58 @@ class MusicService :
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
-    /**
-     * Wrap Media3's notification update so we can swallow the Android 12+
-     * [android.app.ForegroundServiceStartNotAllowedException] that is thrown
-     * when [androidx.media3.session.MediaNotificationManager] tries to call
-     * `startForegroundService` from a delayed callback while the app has
-     * moved to the background. Without this guard, the crash brings the
-     * whole process down whenever a notification asset finishes loading
-     * after the app is backgrounded.
-     */
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         try {
             super.onUpdateNotification(session, startInForegroundRequired)
         } catch (e: ForegroundServiceStartNotAllowedException) {
-            // Android 12+ (API 31): notification update tried to start a
-            // foreground service while the app was in the background. Log and
-            // continue — playback itself is unaffected; the notification will
-            // be refreshed the next time the app returns to the foreground.
-            Timber.tag(TAG).w(e, "onUpdateNotification: suppressed FGS start-not-allowed")
+            handleForegroundServiceStartNotAllowed(e)
+        } catch (e: IllegalStateException) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                e.javaClass.name == ForegroundServiceStartNotAllowedException::class.java.name
+            ) {
+                handleForegroundServiceStartNotAllowed(e)
+            } else {
+                throw e
+            }
         } catch (e: SecurityException) {
-            // Some OEMs throw SecurityException instead of
-            // ForegroundServiceStartNotAllowedException for the same condition.
             Timber.tag(TAG).w(e, "onUpdateNotification: suppressed SecurityException from FGS path")
         }
     }
 
+    private fun handleForegroundServiceStartNotAllowed(error: Throwable?) {
+        Timber.tag(TAG).w(error, "Foreground service start denied during notification update")
+        promoteToForegroundWithLatestNotification()
+    }
+
+    private fun promoteToForegroundWithLatestNotification() {
+        val notification = latestMediaNotification ?: foregroundNotification
+        startForegroundSafely(notification)
+    }
+
+    private fun startForegroundSafely(notification: Notification): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: ForegroundServiceStartNotAllowedException) {
+            Timber.tag(TAG).w(e, "startForeground: FGS start not allowed")
+            false
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "startForeground: failed")
+            false
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        promoteToForegroundWithLatestNotification()
+
         when (intent?.action) {
             ACTION_PLAY_ALARM -> {
                 handleAlarmPlay()
