@@ -971,4 +971,18 @@
         <item quantity="other">%d audiolibros</item>
     </plurals>
     <string name="resume_playback">Resumir la reproducción</string>
+    <string name="liquid_glass_apply_home_cards">Cristal en las tarjetas de casa</string>
+    <string name="liquid_glass_apply_home_cards_desc">Aplica efecto de vidrio líquido a las tarjetas de pantalla principal</string>
+    <string name="liquid_glass_apply_player">Cristal en el reproductor</string>
+    <string name="liquid_glass_apply_player_desc">Aplica el efecto de vidrio líquido a los controles del reproductor</string>
+    <string name="liquid_glass_apply_nav_bar">Cristal sobre barra de navegación</string>
+    <string name="liquid_glass_apply_nav_bar_desc">Aplica efecto de vidrio líquido en la barra de navegación inferior</string>
+    <string name="home_layout_mode">Distribución del hogar</string>
+    <string name="home_layout_list">Vista de lista</string>
+    <string name="home_layout_grid">Vista en cuadrícula</string>
+    <string name="mini_player_height">Altura del reproductor</string>
+    <string name="mini_player_corner_radius">Radio de esquina del reproductor</string>
+    <string name="mini_player_show_favorite">Botón de mostrar favorito</string>
+    <string name="mini_player_show_subscribe">Mostrar botón de suscripción</string>
+    <string name="mini_player_show_hardware">Botón de mostrar hardware</string>
 </resources>
