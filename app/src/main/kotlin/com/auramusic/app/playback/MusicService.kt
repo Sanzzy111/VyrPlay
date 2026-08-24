@@ -16,7 +16,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.app.ActivityManager
 import android.app.ForegroundServiceStartNotAllowedException
 import android.database.SQLException
 import android.media.AudioFocusRequest
@@ -300,94 +299,6 @@ class MusicService :
     @Inject
     lateinit var poTokenProvider: PoTokenProvider
 
-    /**
-     * Wraps [DefaultMediaNotificationProvider] so the asynchronous artwork-load
-     * callback cannot fire into [androidx.media3.session.MediaNotificationManager]
-     * while the app is in the background. On Android 12+ that path throws
-     * [android.app.ForegroundServiceStartNotAllowedException] and crashes the
-     * process (guarded officially since Media3 1.11.0, but kept here so no
-     * update is ever dropped): notification artwork updates are deferred while
-     * the app is backgrounded and flushed (foreground-safe) when the app
-     * returns to the foreground.
-     */
-    private class ForegroundSafeMediaNotificationProvider(
-        private val context: Context,
-        private val delegate: DefaultMediaNotificationProvider,
-    ) : MediaNotification.Provider {
-
-        @Volatile
-        private var pendingNotification: MediaNotification? = null
-
-        @Volatile
-        private var lastCallback: MediaNotification.Provider.Callback? = null
-
-        override fun createNotification(
-            mediaSession: MediaSession,
-            mediaButtonPreferences: ImmutableList<CommandButton>,
-            actionFactory: MediaNotification.ActionFactory,
-            callback: MediaNotification.Provider.Callback,
-        ): MediaNotification {
-            lastCallback = callback
-            flushPendingNotification(callback)
-            val foregroundSafeCallback = object : MediaNotification.Provider.Callback {
-                override fun onNotificationChanged(notification: MediaNotification) {
-                    if (isAppInForeground()) {
-                        pendingNotification = null
-                        callback.onNotificationChanged(notification)
-                    } else {
-                        pendingNotification = notification
-                    }
-                }
-            }
-            return delegate.createNotification(
-                mediaSession,
-                mediaButtonPreferences,
-                actionFactory,
-                foregroundSafeCallback,
-            )
-        }
-
-        override fun handleCustomCommand(
-            mediaSession: MediaSession,
-            action: String,
-            extras: Bundle,
-        ): Boolean = delegate.handleCustomCommand(mediaSession, action, extras)
-
-        override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo =
-            delegate.getNotificationChannelInfo()
-
-        /**
-         * Flushes any deferred notification update if the app is in the
-         * foreground. Called externally when the app transitions from
-         * background to foreground so the user always sees the latest
-         * media notification.
-         */
-        fun flushPending() {
-            val callback = lastCallback ?: return
-            flushPendingNotification(callback)
-        }
-
-        private fun flushPendingNotification(callback: MediaNotification.Provider.Callback) {
-            val pending = pendingNotification ?: return
-            if (isAppInForeground()) {
-                pendingNotification = null
-                callback.onNotificationChanged(pending)
-            }
-        }
-
-        private fun isAppInForeground(): Boolean {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-                ?: return true
-            return try {
-                val state = ActivityManager.RunningAppProcessInfo()
-                ActivityManager.getMyMemoryState(state)
-                state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-            } catch (e: Exception) {
-                true
-            }
-        }
-    }
-
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
     private var lastAudioFocusState = AudioManager.AUDIOFOCUS_NONE
@@ -399,8 +310,6 @@ class MusicService :
     private var dynamicRangeCompressionProcessor: DynamicRangeCompressionAudioProcessor? = null
 
     private lateinit var foregroundNotification: Notification
-    private var notificationProvider: ForegroundSafeMediaNotificationProvider? = null
-    private var activityLifecycleCallbacks: android.app.Application.ActivityLifecycleCallbacks? = null
 
     private var crossfadeEnabled = false
     private var crossfadeDuration = 5000f
@@ -688,9 +597,8 @@ class MusicService :
             reportException(e)
         }
 
-        val provider = ForegroundSafeMediaNotificationProvider(
-            context = this,
-            delegate = DefaultMediaNotificationProvider(
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider(
                 this,
                 { NOTIFICATION_ID },
                 if (isTv) TV_CHANNEL_ID else CHANNEL_ID,
@@ -700,31 +608,6 @@ class MusicService :
                     setSmallIcon(R.drawable.ic_notification_icon)
                 },
         )
-        notificationProvider = provider
-        setMediaNotificationProvider(provider)
-
-        // When the app transitions from background to foreground, flush any
-        // deferred notification update so the media controls / artwork are
-        // always up-to-date in the notification panel.
-        val callbacks = object : android.app.Application.ActivityLifecycleCallbacks {
-            private var startedCount = 0
-            override fun onActivityStarted(activity: android.app.Activity) {
-                startedCount++
-                if (startedCount == 1) {
-                    notificationProvider?.flushPending()
-                }
-            }
-            override fun onActivityStopped(activity: android.app.Activity) {
-                startedCount--
-            }
-            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityResumed(activity: android.app.Activity) {}
-            override fun onActivityPaused(activity: android.app.Activity) {}
-            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: android.app.Activity) {}
-        }
-        activityLifecycleCallbacks = callbacks
-        application.registerActivityLifecycleCallbacks(callbacks)
         // Keep the media notification visible even when playback is idle
         // (e.g. every track just failed to resolve, or the queue finished).
         // The default (AFTER_STOP_OR_ERROR) hides the miniplayer entirely
@@ -3622,9 +3505,6 @@ class MusicService :
         } catch (e: Exception) {
             // Ignore
         }
-        activityLifecycleCallbacks?.let { application.unregisterActivityLifecycleCallbacks(it) }
-        activityLifecycleCallbacks = null
-        notificationProvider = null
         castConnectionHandler?.release()
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
