@@ -30,13 +30,12 @@ jobs:
           mkdir -p $HOME/.config/.android
           keytool -genkeypair -v \
             -keystore $HOME/.config/.android/debug.keystore \
-            -alias androiddebugkey \
+            -alias auramusicdebug \
             -keyalg RSA -keysize 2048 \
             -validity 10000 \
             -storepass android \
             -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-
       - name: Build Debug APK
         run: |
           sed -i 's|tinypinyin = "2.0.3"|tinypinyin = "2.0.1"|g' gradle/libs.versions.toml
